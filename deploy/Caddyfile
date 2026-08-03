@@ -1,0 +1,8 @@
+# Caddy terminates TLS and forwards everything to the Node process.
+# Certificates are automatic, which is what makes the QR codes work: iOS will
+# not open an http:// link from a scanned code in some configurations.
+
+voku.your-school.de {
+	encode zstd gzip
+	reverse_proxy localhost:3000
+}

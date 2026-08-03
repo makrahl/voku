@@ -1,0 +1,108 @@
+@import '@fontsource-variable/inter';
+@import 'tailwindcss';
+
+/*
+ * Swiss minimal, per the design brief.
+ *
+ * One flat off-white plane — no cards, no shadows, no gradients. Structure comes
+ * from hairlines and whitespace, never from a filled box.
+ *
+ * Terracotta is the only accent and it is rationed: the progress fill, the
+ * selected/correct answer state, and primary CTAs. Nowhere else. If it shows up
+ * somewhere else it is a mistake, not a flourish.
+ */
+@theme {
+  --color-paper: #fafaf8;
+  --color-ink: #161613;
+  /* Secondary and meta text, per the brief's .4–.6 alpha range. */
+  --color-ink-60: rgba(22, 22, 19, 0.6);
+  --color-ink-40: rgba(22, 22, 19, 0.4);
+  --color-ink-25: rgba(22, 22, 19, 0.25);
+  --color-hairline: rgba(22, 22, 19, 0.14);
+  --color-hairline-strong: rgba(22, 22, 19, 0.28);
+  --color-accent: #c65d3b;
+  --color-accent-quiet: rgba(198, 93, 59, 0.12);
+
+  /* One face throughout. There is no display alias, because there is no second face. */
+  --font-sans: 'Inter Variable', Inter, system-ui, sans-serif;
+
+  /* The core word on a quiz screen; the score on a result screen. */
+  --text-display: 5.25rem;
+  --text-display--line-height: 1;
+  --text-display--letter-spacing: -0.035em;
+  --text-hero: 3.5rem;
+  --text-hero--line-height: 1.04;
+  --text-hero--letter-spacing: -0.03em;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    line-height: 1.5;
+    font-synthesis-weight: none;
+    -webkit-font-smoothing: antialiased;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  /* Sharp corners throughout; the brief allows 2px and no more. */
+  button,
+  input,
+  select,
+  textarea {
+    border-radius: 2px;
+    font-family: inherit;
+    font-weight: 500;
+  }
+
+  :focus-visible {
+    outline: 1.5px solid var(--color-accent);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Eyebrow / meta labels: small, uppercase, widely tracked. */
+@utility label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-ink-40);
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hairline rules, never borders-as-decoration. */
+@utility rule-t {
+  border-top: 1px solid var(--color-hairline);
+}
+
+@utility rule-b {
+  border-bottom: 1px solid var(--color-hairline);
+}

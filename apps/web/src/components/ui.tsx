@@ -1,0 +1,297 @@
+import { useEffect, useState } from 'react';
+import type { ComponentPropsWithRef, ReactNode } from 'react';
+
+export function cx(...parts: Array<string | false | null | undefined>): string {
+  return parts.filter(Boolean).join(' ');
+}
+
+/**
+ * The wordmark. The dot is the one piece of the old identity kept, now in the
+ * single accent — and it is the only decorative use of terracotta anywhere.
+ */
+export function Wordmark({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const scale = {
+    sm: 'text-xl',
+    md: 'text-3xl',
+    lg: 'text-hero',
+  }[size];
+  return (
+    <span className={cx('font-semibold tracking-tight leading-none', scale)}>
+      Voku<span className="text-accent">.</span>
+    </span>
+  );
+}
+
+export function Label({ children }: { children: ReactNode }) {
+  return <div className="label">{children}</div>;
+}
+
+/**
+ * A page heading you can type into. Styled as the heading it replaces, with the
+ * underline appearing only on hover and focus — which keeps the flat plane
+ * intact while still signalling that the text is a control.
+ *
+ * Commits on blur or Enter, reverts on Escape, and ignores an empty value
+ * rather than letting something be renamed to nothing.
+ */
+export function EditableHeading({
+  value,
+  onSave,
+  disabled = false,
+  ariaLabel,
+  size = 'hero',
+}: {
+  value: string;
+  onSave: (next: string) => void;
+  disabled?: boolean;
+  ariaLabel: string;
+  /** `hero` for a page title, `row` for a name inside a list. */
+  size?: 'hero' | 'row';
+}) {
+  const [draft, setDraft] = useState(value);
+
+  // Follow the server's value when it changes underneath us.
+  useEffect(() => setDraft(value), [value]);
+
+  const commit = () => {
+    const next = draft.trim();
+    if (!next || next === value) {
+      setDraft(value);
+      return;
+    }
+    onSave(next);
+  };
+
+  return (
+    <input
+      value={draft}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur();
+        if (event.key === 'Escape') {
+          setDraft(value);
+          event.currentTarget.blur();
+        }
+      }}
+      className={cx(
+        'border-b border-transparent bg-transparent px-0 text-ink',
+        'focus:border-accent focus:outline-none',
+        size === 'hero'
+          ? 'w-full max-w-2xl py-1 text-hero font-semibold tracking-tight'
+          : 'w-full text-xl',
+        !disabled && 'hover:border-hairline-strong',
+        disabled && 'cursor-default',
+      )}
+    />
+  );
+}
+
+/**
+ * A titled region separated by a hairline — the flat-plane replacement for a
+ * card. Nothing here has a fill or a shadow.
+ */
+export function Section({
+  title,
+  actions,
+  children,
+}: {
+  title?: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-5">
+      {title || actions ? (
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          {title ? <h2 className="text-xl">{title}</h2> : <span />}
+          {actions}
+        </div>
+      ) : null}
+      {children}
+    </section>
+  );
+}
+
+type ButtonProps = ComponentPropsWithRef<'button'> & {
+  variant?: 'primary' | 'secondary' | 'quiet' | 'danger';
+  size?: 'sm' | 'md' | 'lg';
+};
+
+export function Button({ variant = 'secondary', size = 'md', className, ...rest }: ButtonProps) {
+  // shrink-0 + nowrap: in a flex row a button would otherwise be squeezed until
+  // its label wrapped, turning "New test" into a two-line block.
+  const base =
+    'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[2px] font-medium transition-colors disabled:cursor-not-allowed';
+  const sizes = {
+    sm: 'min-h-9 px-3 text-sm',
+    md: 'min-h-11 px-5',
+    lg: 'min-h-14 px-10 text-lg',
+  }[size];
+  const variants = {
+    // Solid terracotta with off-white text — the brief's primary action. When
+    // disabled it drops the fill entirely rather than fading to a washed-out
+    // pink, which reads as a broken box rather than an inactive control.
+    primary:
+      'bg-accent text-paper hover:opacity-90 disabled:bg-transparent disabled:text-ink-25 disabled:border disabled:border-hairline',
+    secondary: 'border border-hairline-strong text-ink hover:border-ink disabled:text-ink-25',
+    quiet: 'text-ink-60 hover:text-ink disabled:text-ink-25',
+    danger: 'border border-hairline-strong text-ink-60 hover:border-ink hover:text-ink',
+  }[variant];
+  return <button className={cx(base, sizes, variants, className)} {...rest} />;
+}
+
+export function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-2">
+      <span className="label">{label}</span>
+      {children}
+      {hint ? <span className="text-sm text-ink-60">{hint}</span> : null}
+    </label>
+  );
+}
+
+/* Inputs are hairline-underlined rather than boxed, to keep the plane flat. */
+const inputClass =
+  'w-full min-h-11 border-b border-hairline-strong bg-transparent px-0 py-2 text-ink placeholder:text-ink-25 focus:border-accent';
+
+export function Input(props: ComponentPropsWithRef<'input'>) {
+  return <input {...props} className={cx(inputClass, props.className)} />;
+}
+
+/**
+ * Autocorrect is off everywhere a student types an answer. Grading is strict,
+ * and an iPad on a German keyboard will happily turn "thorough" into "through" —
+ * marking that wrong would be marking the keyboard, not the student.
+ */
+export function AnswerInput(props: ComponentPropsWithRef<'input'>) {
+  return (
+    <input
+      {...props}
+      autoComplete="off"
+      autoCorrect="off"
+      autoCapitalize="off"
+      spellCheck={false}
+      className={cx(
+        'w-full border-b-2 border-hairline-strong bg-transparent px-0 pb-3 pt-2',
+        'text-center text-5xl font-medium tracking-tight text-ink',
+        'placeholder:text-ink-25 focus:border-accent focus:outline-none',
+        props.className,
+      )}
+    />
+  );
+}
+
+export function Textarea(props: ComponentPropsWithRef<'textarea'>) {
+  return (
+    <textarea
+      {...props}
+      className={cx(
+        'w-full min-h-32 border border-hairline bg-transparent p-3 leading-relaxed',
+        'text-ink placeholder:text-ink-25 focus:border-accent',
+        props.className,
+      )}
+    />
+  );
+}
+
+export function Select(props: ComponentPropsWithRef<'select'>) {
+  const { children, className, ...rest } = props;
+  return (
+    <select {...rest} className={cx(inputClass, className)}>
+      {children}
+    </select>
+  );
+}
+
+/**
+ * Status is carried by weight and a hairline, not by a filled chip — filled
+ * pills would reintroduce the boxes the brief removes.
+ */
+export function Status({
+  tone = 'neutral',
+  children,
+}: {
+  tone?: 'neutral' | 'accent' | 'quiet';
+  children: ReactNode;
+}) {
+  const tones = {
+    neutral: 'text-ink border-hairline-strong',
+    accent: 'text-accent border-accent',
+    quiet: 'text-ink-40 border-hairline',
+  }[tone];
+  return (
+    <span
+      className={cx(
+        'inline-flex items-center border px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.12em]',
+        tones,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function Note({ children }: { children: ReactNode }) {
+  return (
+    <p className="max-w-prose border-l border-hairline-strong pl-4 text-sm leading-relaxed text-ink-60">
+      {children}
+    </p>
+  );
+}
+
+export function Empty({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div className="rule-t rule-b py-14 text-center">
+      <p className="text-lg font-semibold">{title}</p>
+      {children ? <div className="mt-2 text-sm text-ink-60">{children}</div> : null}
+    </div>
+  );
+}
+
+export function Spinner({ label }: { label?: string }) {
+  return (
+    <div className="flex items-center gap-3 text-sm text-ink-60" role="status">
+      <span className="size-3 animate-spin rounded-full border border-hairline-strong border-t-accent" />
+      {label ?? 'Working…'}
+    </div>
+  );
+}
+
+export function ErrorText({ children }: { children: ReactNode }) {
+  return children ? <p className="text-sm text-ink-60">{children}</p> : null;
+}
+
+/** A hairline-divided list — the flat-plane replacement for a stack of cards. */
+export function Rows({ children }: { children: ReactNode }) {
+  return <ul className="rule-t">{children}</ul>;
+}
+
+export function Row({
+  children,
+  className,
+  onClick,
+}: {
+  children: ReactNode;
+  className?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <li
+      className={cx('rule-b', onClick && 'cursor-pointer hover:bg-accent-quiet', className)}
+      onClick={onClick}
+    >
+      <div className="flex flex-wrap items-center gap-4 px-1 py-4">{children}</div>
+    </li>
+  );
+}

@@ -1,0 +1,29 @@
+# /etc/systemd/system/voku.service
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now voku
+#   journalctl -u voku -f
+
+[Unit]
+Description=voku — in-class vocabulary sprints
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=voku
+WorkingDirectory=/srv/voku
+EnvironmentFile=/srv/voku/.env
+ExecStart=/usr/bin/node apps/server/dist/index.js
+Restart=on-failure
+RestartSec=5
+
+# The process only ever needs to write its own SQLite file.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/voku/apps/server/data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+{
+  "name": "voku",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace=@voku/server & npm run dev --workspace=@voku/web",
+    "build": "npm run build --workspace=@voku/web && npm run build --workspace=@voku/server",
+    "start": "npm run start --workspace=@voku/server",
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "seed-admin": "npm run seed-admin --workspace=@voku/server"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
