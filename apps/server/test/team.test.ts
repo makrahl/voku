@@ -222,6 +222,66 @@ describe('who may manage the team', () => {
     expect((await server.post('/api/admin/classes', { name: '7a' })).status).toBe(201);
   });
 
+  describe('the language model is instance-wide, not per teacher', () => {
+    it('tells a plain teacher only whether the AI is available', async () => {
+      const res = await server.get('/api/admin/settings/llm');
+
+      // Enough to decide whether the AI buttons appear, and nothing more.
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ configured: false });
+      expect(res.body).not.toHaveProperty('baseUrl');
+      expect(res.body).not.toHaveProperty('model');
+      expect(res.body).not.toHaveProperty('hasApiKey');
+    });
+
+    it('refuses to let a plain teacher change or test it', async () => {
+      const put = await server.request('PUT', '/api/admin/settings/llm', {
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'sneaky',
+        model: 'whatever',
+      });
+      expect(put.status).toBe(403);
+      expect(put.body.error).toContain('Only an admin');
+      expect((await server.post('/api/admin/settings/llm/test')).status).toBe(403);
+    });
+
+    it('leaves the configuration untouched after a refused write', async () => {
+      await server.request('PUT', '/api/admin/settings/llm', { apiKey: 'sneaky' });
+
+      server.clearCookies();
+      await server.post('/api/admin/auth/login', { email: 'head@school.de', password: STRONG });
+      expect((await server.get('/api/admin/settings/llm')).body.hasApiKey).toBe(false);
+    });
+
+    it('gives an admin the full configuration, but never the key itself', async () => {
+      server.clearCookies();
+      await server.post('/api/admin/auth/login', { email: 'head@school.de', password: STRONG });
+      await server.request('PUT', '/api/admin/settings/llm', {
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'secret-value',
+        model: 'test-model',
+      });
+
+      const res = await server.get('/api/admin/settings/llm');
+      expect(res.body).toMatchObject({ model: 'test-model', hasApiKey: true, configured: true });
+      expect(JSON.stringify(res.body)).not.toContain('secret-value');
+    });
+
+    it('lets a plain teacher see that the AI became available, without the details', async () => {
+      server.clearCookies();
+      await server.post('/api/admin/auth/login', { email: 'head@school.de', password: STRONG });
+      await server.request('PUT', '/api/admin/settings/llm', {
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'secret-value',
+        model: 'test-model',
+      });
+
+      server.clearCookies();
+      await server.post('/api/admin/auth/login', { email: 'plain@school.de', password: STRONG });
+      expect((await server.get('/api/admin/settings/llm')).body).toEqual({ configured: true });
+    });
+  });
+
   it('promotes and demotes', async () => {
     void plainTeacherCookie;
     server.clearCookies();

@@ -20,7 +20,6 @@ import { Classes, ClassDetail } from './Classes.tsx';
 import { Composer } from './Composer.tsx';
 import { Board } from './Board.tsx';
 import { Settings } from './Settings.tsx';
-import { Team } from './Team.tsx';
 import { AcceptInvite, Setup } from './Setup.tsx';
 import { Help } from './Help.tsx';
 
@@ -130,13 +129,17 @@ function Layout({ me, children }: { me: Me; children: React.ReactNode }) {
             <HelpIcon />
           </IconButton>
 
-          <IconButton
-            label="Settings"
-            active={pathname.startsWith('/admin/settings')}
-            onClick={() => navigate('/admin/settings')}
-          >
-            <GearIcon />
-          </IconButton>
+          {/* Settings is instance-wide configuration and the team roster, so
+              the gear does not exist for anyone who cannot change either. */}
+          {me.isAdmin ? (
+            <IconButton
+              label="Settings"
+              active={pathname.startsWith('/admin/settings')}
+              onClick={() => navigate('/admin/settings')}
+            >
+              <GearIcon />
+            </IconButton>
+          ) : null}
 
           <Menu
             label="Your account"
@@ -150,18 +153,6 @@ function Layout({ me, children }: { me: Me; children: React.ReactNode }) {
             {(close) => (
               <>
                 <MenuLabel>{me.email}</MenuLabel>
-                {/* Managing colleagues is admin-only, so it is not even listed
-                    for anyone else. */}
-                {me.isAdmin ? (
-                  <MenuItem
-                    onClick={() => {
-                      close();
-                      navigate('/admin/team');
-                    }}
-                  >
-                    Team
-                  </MenuItem>
-                ) : null}
                 <MenuItem
                   onClick={() => {
                     close();
@@ -188,9 +179,15 @@ function SignedIn({ me }: { me: Me }) {
         <Route path="/classes/:classId" element={<ClassDetail />} />
         <Route path="/tests/:testId" element={<Composer />} />
         <Route path="/tests/:testId/board" element={<Board />} />
-        <Route path="/settings" element={<Settings />} />
         <Route path="/help" element={<Help />} />
-        {me.isAdmin ? <Route path="/team" element={<Team meId={me.id} />} /> : null}
+        {/* Both are admin-only; anyone else following an old link lands home. */}
+        {me.isAdmin ? (
+          <>
+            <Route path="/settings" element={<Settings meId={me.id} />} />
+            {/* Team used to live here; keep the link working. */}
+            <Route path="/team" element={<Navigate to="/admin/settings" replace />} />
+          </>
+        ) : null}
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </Layout>

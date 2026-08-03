@@ -107,7 +107,7 @@ export function IconButton({
       aria-label={label}
       onClick={onClick}
       className={cx(
-        'inline-flex size-10 shrink-0 items-center justify-center rounded-[2px] transition-colors',
+        'inline-flex size-11 shrink-0 items-center justify-center rounded-[2px] transition-colors',
         active ? 'text-ink' : 'text-ink-40 hover:text-ink',
       )}
       {...rest}
@@ -160,7 +160,7 @@ export function Menu({
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className={cx(
-          'inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-[2px] px-1 transition-colors',
+          'inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-[2px] px-1 transition-colors',
           open ? 'text-ink' : 'text-ink-40 hover:text-ink',
         )}
       >
@@ -170,7 +170,7 @@ export function Menu({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 top-11 z-20 min-w-56 border border-hairline-strong bg-paper py-1"
+          className="absolute right-0 top-12 z-20 min-w-56 border border-hairline-strong bg-paper py-1"
         >
           {children(() => setOpen(false))}
         </div>

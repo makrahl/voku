@@ -93,9 +93,19 @@ export class TestServer {
     return this.request<T>('DELETE', path);
   }
 
-  /** Creates the single teacher account and signs in, leaving the cookie in the jar. */
-  async signInAsTeacher(email = 'teacher@school.de', password = 'hunter2hunter2'): Promise<void> {
-    createTeacher(this.db, email, password);
+  /**
+   * Creates a teacher account and signs in, leaving the cookie in the jar.
+   *
+   * Admin by default, because in these suites this is the person who set the
+   * instance up. Pass `isAdmin: false` to exercise what a colleague can reach.
+   */
+  async signInAsTeacher(
+    email = 'teacher@school.de',
+    password = 'hunter2hunter2',
+    { isAdmin = true }: { isAdmin?: boolean } = {},
+  ): Promise<void> {
+    const teacher = createTeacher(this.db, email, password);
+    if (isAdmin) this.db.run('UPDATE teachers SET is_admin = 1 WHERE id = :id', { id: teacher.id });
     const res = await this.post('/api/admin/auth/login', { email, password });
     if (res.status !== 200) throw new Error(`sign-in failed: ${JSON.stringify(res.body)}`);
   }

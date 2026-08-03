@@ -104,9 +104,9 @@ export function Team({ meId }: { meId: string }) {
 
   return (
     <div className="flex flex-col gap-14">
-      <div className="flex flex-col gap-3">
-        <span className="label">Who can use this instance</span>
-        <h1 className="text-hero">Team</h1>
+      <div className="flex flex-col gap-2">
+        <h2 className="text-2xl">Team</h2>
+        <p className="text-ink-60">Who can use this instance.</p>
       </div>
 
       <ErrorText>{error}</ErrorText>

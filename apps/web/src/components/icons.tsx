@@ -7,8 +7,8 @@ function Glyph({ children, label }: { children: React.ReactNode; label?: string 
   return (
     <svg
       viewBox="0 0 24 24"
-      width="22"
-      height="22"
+      width="26"
+      height="26"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
@@ -55,8 +55,8 @@ export function ChevronIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      width="12"
-      height="12"
+      width="14"
+      height="14"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
