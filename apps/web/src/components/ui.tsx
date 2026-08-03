@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
@@ -86,6 +86,123 @@ export function EditableHeading({
         disabled && 'cursor-default',
       )}
     />
+  );
+}
+
+/**
+ * An icon button for the header. Square, hairline-free until hovered, so a row
+ * of them reads as quiet chrome rather than three competing controls.
+ */
+export function IconButton({
+  label,
+  active = false,
+  onClick,
+  children,
+  ...rest
+}: ComponentPropsWithRef<'button'> & { label: string; active?: boolean }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className={cx(
+        'inline-flex size-10 shrink-0 items-center justify-center rounded-[2px] transition-colors',
+        active ? 'text-ink' : 'text-ink-40 hover:text-ink',
+      )}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * A dropdown anchored to an icon. It needs a surface to be readable over
+ * content, so it is the one place a panel exists — kept to a hairline border on
+ * the paper colour rather than becoming a floating card.
+ */
+export function Menu({
+  trigger,
+  label,
+  children,
+}: {
+  trigger: (open: boolean) => ReactNode;
+  label: string;
+  children: (close: () => void) => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapper = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={wrapper}>
+      <button
+        type="button"
+        title={label}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={cx(
+          'inline-flex h-10 shrink-0 items-center justify-center gap-1 rounded-[2px] px-1 transition-colors',
+          open ? 'text-ink' : 'text-ink-40 hover:text-ink',
+        )}
+      >
+        {trigger(open)}
+      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-11 z-20 min-w-56 border border-hairline-strong bg-paper py-1"
+        >
+          {children(() => setOpen(false))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function MenuLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="rule-b px-4 pb-2 pt-1.5 text-sm text-ink-40">
+      <span className="truncate">{children}</span>
+    </div>
+  );
+}
+
+export function MenuItem({
+  children,
+  onClick,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="block w-full px-4 py-2.5 text-left text-ink transition-colors hover:bg-accent-quiet"
+    >
+      {children}
+    </button>
   );
 }
 

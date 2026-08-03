@@ -2,13 +2,27 @@ import { useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, admin, api } from '../lib/api.ts';
-import { Button, ErrorText, Field, Input, Spinner, Wordmark, cx } from '../components/ui.tsx';
+import {
+  Button,
+  ErrorText,
+  Field,
+  IconButton,
+  Input,
+  Menu,
+  MenuItem,
+  MenuLabel,
+  Spinner,
+  Wordmark,
+  cx,
+} from '../components/ui.tsx';
+import { AccountIcon, ChevronIcon, GearIcon, HelpIcon } from '../components/icons.tsx';
 import { Classes, ClassDetail } from './Classes.tsx';
 import { Composer } from './Composer.tsx';
 import { Board } from './Board.tsx';
 import { Settings } from './Settings.tsx';
 import { Team } from './Team.tsx';
 import { AcceptInvite, Setup } from './Setup.tsx';
+import { Help } from './Help.tsx';
 
 interface Me {
   id: string;
@@ -88,46 +102,77 @@ function Layout({ me, children }: { me: Me; children: React.ReactNode }) {
     },
   });
 
-  const tabs = [
-    {
-      to: '/admin',
-      label: 'Classes',
-      match: (p: string) => p === '/admin' || p.startsWith('/admin/classes') || p.startsWith('/admin/tests'),
-    },
-    // Managing colleagues is an admin concern, so it is not even shown to others.
-    ...(me.isAdmin
-      ? [{ to: '/admin/team', label: 'Team', match: (p: string) => p.startsWith('/admin/team') }]
-      : []),
-    { to: '/admin/settings', label: 'Settings', match: (p: string) => p.startsWith('/admin/settings') },
-  ];
+  const onClasses =
+    pathname === '/admin' || pathname.startsWith('/admin/classes') || pathname.startsWith('/admin/tests');
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-8 py-8">
-      <header className="rule-b flex flex-wrap items-baseline justify-between gap-6 pb-5">
+      <header className="rule-b flex items-center justify-between gap-6 pb-4">
         <Link to="/admin">
           <Wordmark size="sm" />
         </Link>
-        <nav className="flex items-baseline gap-6">
-          {tabs.map((tab) => (
-            <Link
-              key={tab.to}
-              to={tab.to}
-              className={cx(
-                'label transition-colors',
-                tab.match(pathname) ? '!text-ink' : 'hover:!text-ink',
-              )}
-            >
-              {tab.label}
-            </Link>
-          ))}
-          <span className="hidden text-sm text-ink-40 sm:inline">{me.email}</span>
-          <button
-            type="button"
-            onClick={() => signOut.mutate()}
-            className="label transition-colors hover:!text-ink"
+
+        {/* One text link for the thing the app is actually for; everything else
+            is chrome, and reads as chrome. */}
+        <nav className="flex items-center gap-1">
+          <Link
+            to="/admin"
+            className={cx('label mr-3 transition-colors', onClasses ? '!text-ink' : 'hover:!text-ink')}
           >
-            Sign out
-          </button>
+            Classes
+          </Link>
+
+          <IconButton
+            label="Help"
+            active={pathname.startsWith('/admin/help')}
+            onClick={() => navigate('/admin/help')}
+          >
+            <HelpIcon />
+          </IconButton>
+
+          <IconButton
+            label="Settings"
+            active={pathname.startsWith('/admin/settings')}
+            onClick={() => navigate('/admin/settings')}
+          >
+            <GearIcon />
+          </IconButton>
+
+          <Menu
+            label="Your account"
+            trigger={() => (
+              <>
+                <AccountIcon />
+                <ChevronIcon />
+              </>
+            )}
+          >
+            {(close) => (
+              <>
+                <MenuLabel>{me.email}</MenuLabel>
+                {/* Managing colleagues is admin-only, so it is not even listed
+                    for anyone else. */}
+                {me.isAdmin ? (
+                  <MenuItem
+                    onClick={() => {
+                      close();
+                      navigate('/admin/team');
+                    }}
+                  >
+                    Team
+                  </MenuItem>
+                ) : null}
+                <MenuItem
+                  onClick={() => {
+                    close();
+                    signOut.mutate();
+                  }}
+                >
+                  Sign out
+                </MenuItem>
+              </>
+            )}
+          </Menu>
         </nav>
       </header>
       <main className="flex flex-1 flex-col py-12">{children}</main>
@@ -144,6 +189,7 @@ function SignedIn({ me }: { me: Me }) {
         <Route path="/tests/:testId" element={<Composer />} />
         <Route path="/tests/:testId/board" element={<Board />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/help" element={<Help />} />
         {me.isAdmin ? <Route path="/team" element={<Team meId={me.id} />} /> : null}
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
