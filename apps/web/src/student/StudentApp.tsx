@@ -42,6 +42,36 @@ function Centred({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Every dead end a student can reach — signed out, a dud code, a test that
+ * ended. They all carry the wordmark, because these are the screens most likely
+ * to be seen by someone who does not yet know what this app is, and a bare line
+ * of grey text tells them nothing.
+ */
+function Message({
+  eyebrow,
+  title,
+  children,
+  action,
+}: {
+  eyebrow: string;
+  title: string;
+  children?: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <Centred>
+      <Wordmark size="lg" />
+      <div className="flex flex-col gap-3">
+        <span className="label">{eyebrow}</span>
+        <h1 className="text-hero">{title}</h1>
+      </div>
+      {children ? <div className="max-w-sm text-lg text-ink-60">{children}</div> : null}
+      {action}
+    </Centred>
+  );
+}
+
 /** `/s/<token>` — swaps the token for a cookie so it leaves the address bar. */
 function TokenLogin() {
   const { token = '' } = useParams();
@@ -61,15 +91,14 @@ function TokenLogin() {
 
   if (error) {
     return (
-      <Centred>
-        <span className="label">Sign in</span>
-        <h1 className="text-hero">That code did not work</h1>
-        <p className="max-w-md text-lg text-ink-60">{error}</p>
-      </Centred>
+      <Message eyebrow="Sign in" title="That code did not work">
+        {error} Ask your teacher for a new one — codes can be reprinted in a moment.
+      </Message>
     );
   }
   return (
     <Centred>
+      <Wordmark size="lg" />
       <Spinner label="Signing you in…" />
     </Centred>
   );
@@ -87,10 +116,10 @@ function Home() {
   if (isLoading) return <Centred><Spinner /></Centred>;
   if (error) {
     return (
-      <Centred>
-        <h1 className="text-hero">You are not signed in</h1>
-        <p className="text-lg text-ink-60">Scan your code again to get back in.</p>
-      </Centred>
+      <Message eyebrow="Vocabulary sprints" title="Scan your code to start">
+        Point your camera at the code your teacher gave you. It signs you in and keeps you signed
+        in — there is no password to remember.
+      </Message>
     );
   }
   if (!data) return null;
@@ -323,14 +352,27 @@ function Sprint({ mode }: { mode: 'graded' | 'practice' }) {
 
   if (error) {
     return (
+      <Message
+        eyebrow="Quiz"
+        title="This quiz is not open"
+        action={
+          <Button variant="primary" onClick={() => navigate('/s')}>
+            Back
+          </Button>
+        }
+      >
+        {error}
+      </Message>
+    );
+  }
+  if (!state) {
+    return (
       <Centred>
-        <h1 className="text-hero">That did not work</h1>
-        <p className="text-lg text-ink-60">{error}</p>
-        <Button onClick={() => navigate('/s')}>Back</Button>
+        <Wordmark size="lg" />
+        <Spinner label="Getting ready…" />
       </Centred>
     );
   }
-  if (!state) return <Centred><Spinner label="Getting ready…" /></Centred>;
 
   const { attempt, question } = state;
 
@@ -460,7 +502,21 @@ function Review() {
   });
 
   if (isLoading) return <Centred><Spinner /></Centred>;
-  if (error) return <Centred><p className="text-lg text-ink-60">{(error as ApiError).message}</p></Centred>;
+  if (error) {
+    return (
+      <Message
+        eyebrow="Review"
+        title="Not available yet"
+        action={
+          <Button variant="primary" onClick={() => navigate('/s')}>
+            Back
+          </Button>
+        }
+      >
+        {(error as ApiError).message}
+      </Message>
+    );
+  }
   if (!data) return null;
 
   const promptOf = (payload: QuestionPayload) => {
