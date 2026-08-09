@@ -13,6 +13,7 @@ import {
   Spinner,
   Status,
 } from '../components/ui.tsx';
+import { AdminSection } from './AdminSection.tsx';
 
 interface TeacherView {
   id: string;
@@ -103,15 +104,13 @@ export function Team({ meId }: { meId: string }) {
   const invites = team.data?.invites ?? [];
 
   return (
-    <div className="flex flex-col gap-14">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-2xl">Team</h2>
-        <p className="text-ink-60">Who can use this instance.</p>
-      </div>
-
+    <AdminSection
+      title="Teachers"
+      intro="Who can use this instance. Everyone sees only their own classes and results."
+    >
       <ErrorText>{error}</ErrorText>
 
-      <section className="flex flex-col gap-6">
+      <section className="flex flex-col gap-6 pt-4">
         <span className="label">Invite a colleague</span>
         <form
           className="flex max-w-2xl flex-wrap items-end gap-6"
@@ -210,10 +209,10 @@ export function Team({ meId }: { meId: string }) {
           </Rows>
         )}
         <Note>
-          Every teacher sees only their own classes and results. A teacher who still has classes
-          cannot be removed — those classes and all their results would go too.
+          A teacher who still has classes cannot be removed — those classes and all their results
+          would go with them.
         </Note>
       </section>
-    </div>
+    </AdminSection>
   );
 }

@@ -15,11 +15,12 @@ import {
   Wordmark,
   cx,
 } from '../components/ui.tsx';
-import { AccountIcon, ChevronIcon, GearIcon, HelpIcon } from '../components/icons.tsx';
+import { AccountIcon, ChevronIcon, HelpIcon } from '../components/icons.tsx';
 import { Classes, ClassDetail } from './Classes.tsx';
 import { Composer } from './Composer.tsx';
 import { Board } from './Board.tsx';
-import { Settings } from './Settings.tsx';
+import { LlmSettings } from './Settings.tsx';
+import { Team } from './Team.tsx';
 import { AcceptInvite, Setup } from './Setup.tsx';
 import { Help } from './Help.tsx';
 
@@ -129,18 +130,6 @@ function Layout({ me, children }: { me: Me; children: React.ReactNode }) {
             <HelpIcon />
           </IconButton>
 
-          {/* Settings is instance-wide configuration and the team roster, so
-              the gear does not exist for anyone who cannot change either. */}
-          {me.isAdmin ? (
-            <IconButton
-              label="Settings"
-              active={pathname.startsWith('/admin/settings')}
-              onClick={() => navigate('/admin/settings')}
-            >
-              <GearIcon />
-            </IconButton>
-          ) : null}
-
           <Menu
             label="Your account"
             trigger={() => (
@@ -153,6 +142,28 @@ function Layout({ me, children }: { me: Me; children: React.ReactNode }) {
             {(close) => (
               <>
                 <MenuLabel>{me.email}</MenuLabel>
+                {/* Instance-wide configuration, so it is not listed for anyone
+                    who cannot change it. */}
+                {me.isAdmin ? (
+                  <>
+                    <MenuItem
+                      onClick={() => {
+                        close();
+                        navigate('/admin/settings/llm');
+                      }}
+                    >
+                      Language model
+                    </MenuItem>
+                    <MenuItem
+                      onClick={() => {
+                        close();
+                        navigate('/admin/settings/teachers');
+                      }}
+                    >
+                      Teachers
+                    </MenuItem>
+                  </>
+                ) : null}
                 <MenuItem
                   onClick={() => {
                     close();
@@ -180,12 +191,14 @@ function SignedIn({ me }: { me: Me }) {
         <Route path="/tests/:testId" element={<Composer />} />
         <Route path="/tests/:testId/board" element={<Board />} />
         <Route path="/help" element={<Help />} />
-        {/* Both are admin-only; anyone else following an old link lands home. */}
+        {/* Admin-only; anyone else following an old link lands on Classes. */}
         {me.isAdmin ? (
           <>
-            <Route path="/settings" element={<Settings meId={me.id} />} />
-            {/* Team used to live here; keep the link working. */}
-            <Route path="/team" element={<Navigate to="/admin/settings" replace />} />
+            <Route path="/settings/llm" element={<LlmSettings />} />
+            <Route path="/settings/teachers" element={<Team meId={me.id} />} />
+            {/* Both used to live at other paths; keep old links working. */}
+            <Route path="/settings" element={<Navigate to="/admin/settings/llm" replace />} />
+            <Route path="/team" element={<Navigate to="/admin/settings/teachers" replace />} />
           </>
         ) : null}
         <Route path="*" element={<Navigate to="/admin" replace />} />

@@ -3,11 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LlmSettingsPublic } from '@voku/shared';
 import { ApiError, admin, api } from '../lib/api.ts';
 import { Button, ErrorText, Field, Input, Note, Spinner, Status } from '../components/ui.tsx';
-import { Team } from './Team.tsx';
+import { AdminSection } from './AdminSection.tsx';
 
 type Settings = LlmSettingsPublic & { configured: boolean };
 
-export function Settings({ meId }: { meId: string }) {
+export function LlmSettings() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ baseUrl: '', model: '', visionModel: '', apiKey: '' });
   const [tested, setTested] = useState<string | null>(null);
@@ -51,18 +51,13 @@ export function Settings({ meId }: { meId: string }) {
   if (settings.isLoading) return <Spinner />;
 
   return (
-    <div className="flex flex-col gap-12">
-      <div className="flex flex-col gap-3">
-        <span className="label">Admin</span>
-        <h1 className="text-hero">Settings</h1>
-        <p className="max-w-prose text-ink-60">
-          These apply to the whole instance, not just to you.
-        </p>
-      </div>
-
-      <div className="rule-t rule-b flex max-w-xl flex-col gap-8 py-10">
+    <AdminSection
+      title="Language model"
+      intro="Optional, and shared by everyone on this instance. Without one you can still build and run every test — you just write the gap sentences and definitions yourself."
+    >
+      <div className="flex max-w-xl flex-col gap-8">
         <div className="flex items-center justify-between gap-3">
-          <span className="label">Language model</span>
+          <span className="label">Connection</span>
           <Status tone={settings.data?.configured ? 'accent' : 'quiet'}>
             {settings.data?.configured ? 'connected' : 'not configured'}
           </Status>
@@ -128,8 +123,6 @@ export function Settings({ meId }: { meId: string }) {
         server, never sent back to the browser, and students never touch this part of the app.
         Everyone else is only told whether the AI is available, not what it is.
       </Note>
-
-      <Team meId={meId} />
-    </div>
+    </AdminSection>
   );
 }

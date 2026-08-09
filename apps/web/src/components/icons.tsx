@@ -32,15 +32,6 @@ export function AccountIcon({ label }: { label?: string }) {
   );
 }
 
-export function GearIcon({ label }: { label?: string }) {
-  return (
-    <Glyph label={label}>
-      <circle cx="12" cy="12" r="3.25" />
-      <path d="M12 2.6v2.2M12 19.2v2.2M21.4 12h-2.2M4.8 12H2.6M18.65 5.35l-1.55 1.55M6.9 17.1l-1.55 1.55M18.65 18.65L17.1 17.1M6.9 6.9L5.35 5.35" />
-    </Glyph>
-  );
-}
-
 export function HelpIcon({ label }: { label?: string }) {
   return (
     <Glyph label={label}>
