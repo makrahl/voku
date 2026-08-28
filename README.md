@@ -22,8 +22,20 @@ hides and the app still builds and runs a complete test from a pasted word list.
 ```bash
 npm install
 npm run build
-VOKU_ADMIN_PASSWORD=change-me npm run seed-admin -- you@school.de
-npm start                       # http://localhost:3000/admin
+npm start
+```
+
+On first boot the server prints a one-time setup code. Open the address it
+gives you, enter that code, and the account you create owns the instance —
+finding the URL is not the same as being able to claim it.
+
+```
+  ┌─────────────────────────────────────────────┐
+  │  voku is not set up yet.                    │
+  │  Open http://localhost:3000                 │
+  │  and enter this setup code:                 │
+  │      MHGP-PD7J-39XK                         │
+  └─────────────────────────────────────────────┘
 ```
 
 For development, two processes:
@@ -34,7 +46,7 @@ npm run dev --workspace=@voku/web      # UI on :5173, proxies /api to :3000
 ```
 
 ```bash
-npm test          # 200 tests, no network required
+npm test          # 235 tests, no network required
 npm run typecheck
 ```
 
@@ -48,8 +60,15 @@ packages/shared    Zod schemas for every question payload. The LLM validator,
                    all agree because they share one definition.
 apps/server        Express 5 + node:sqlite. No ORM, no native dependencies.
 apps/web           Vite + React + Tailwind. Two route trees on one origin:
-                   /admin/* is the teacher, /s/* is the student.
+                   /admin/* is the teacher, /s/* is the student, and / is a
+                   signpost between them — anyone already signed in is
+                   forwarded straight on.
 ```
+
+The interface follows `Voku Design Brief.md`: one flat off-white plane, Inter
+throughout, structure from hairlines and whitespace rather than cards, and
+terracotta rationed to the progress fill, the correct answer, and primary
+buttons. If terracotta appears anywhere else it is a mistake, not a flourish.
 
 `npm run build` compiles the web app into `apps/server/public`, so production is
 a single Node process serving both the API and the SPA.
@@ -71,12 +90,16 @@ but honest; *become* is A1-easy and a total trap, since German *bekommen* means
 to receive.
 
 - **Difficulty** orders the sprint and drives the top-N cutoff.
-- **Trickiness** decides which words become multiple choice.
+- **Trickiness** — or difficulty on its own, from 7 upwards — decides which
+  words become multiple choice.
 
 That second rule is the anti-guessing mechanism. Wrong answers cost nothing, so
 tapping a random option would be free marks — unless multiple choice is reserved
-for words where the wrong options are genuine traps. The trickiness *reason*
-("German *Gift* means poison") is fed straight into the distractor prompt.
+for words where guessing is not a free ride: either the wrong options are
+genuine traps, or the word is hard enough that four plausible options is a real
+question. It is never used to make an easy word easier. The trickiness *reason*
+("German *Gift* means poison") is fed straight into the distractor prompt, and
+the word list lets you mark a trap by hand when no model is connected.
 
 The teacher's format mix is a set of **preferences, not quotas**. A text with
 three tricky words cannot support ten multiple-choice questions, and the review
@@ -145,12 +168,37 @@ The API key is stored server-side and is never sent back to the browser.
 
 ## Accounts
 
-One teacher account, created from the command line:
+**Teachers** sign in with a password. There is no sign-up page: the first
+account is created by claiming the instance with the printed setup code, and
+everyone after that joins by invitation.
 
-```bash
-npm run seed-admin -- you@school.de      # prompts for a password
-```
+An admin creates an invite link from *Account → Teachers*. The link is returned
+to the browser and copied to the clipboard rather than emailed — send it however
+you already talk to that colleague, which keeps a mail server and its spam
+filter out of the deployment entirely. Links last seven days and work once.
 
-Running it again for the same email resets the password. Students have no
-accounts and no passwords — each has one long-lived token in their QR code,
-which you can rotate from the class page if a card goes astray.
+Two roles:
+
+| | Teacher | Admin |
+|---|---|---|
+| Own classes, tests and results | yes | yes |
+| See anyone else's classes | no | no |
+| Invite, promote or remove teachers | no | yes |
+| Configure the language model | no | yes |
+
+The language model is instance-wide — one account, one key, one bill — so a
+plain teacher is told only *whether* the AI is available, never the provider,
+the model, or that a key exists. The server enforces this regardless of what
+the interface offers.
+
+You cannot demote or remove the last admin, and a teacher who still owns
+classes cannot be removed, since that would delete every result in them.
+
+`npm run seed-admin -- you@school.de` still exists as a back door: it creates an
+account, or resets a password if the email already exists. That is the recovery
+path when an admin locks themselves out, since there is no password-reset email.
+
+**Students** have no accounts and no passwords — each has one long-lived token
+in their printed QR code, which you can rotate from the class page if a card
+goes astray. The only personal data stored about a student is a first name and
+their scores.
