@@ -134,9 +134,8 @@ describe('the student home screen', () => {
     const study = await server.get(`/api/s/tests/${testId}/words`);
     expect(study.body.words).toHaveLength(12);
     expect(study.body.words[0]).toHaveProperty('translationDe');
-    // Pasted from a word list, so there is no text to mark up.
+    // Pasted from a word list, so there is no text to show.
     expect(study.body.blocks).toEqual([]);
-    expect(study.body.alsoLearn).toHaveLength(12);
   });
 
   it('refuses the word list while the test is open', async () => {

@@ -261,14 +261,3 @@ export function annotateText(text: string, words: AnnotatableWord[]): TextBlock[
     return parsed;
   });
 }
-
-/** Words on the list that never appear in the text — shown separately. */
-export function unmatchedWords(
-  blocks: TextBlock[],
-  words: AnnotatableWord[],
-): AnnotatableWord[] {
-  const found = new Set(
-    blocks.flatMap((b) => b.segments.map((s) => s.wordId)).filter(Boolean),
-  );
-  return words.filter((w) => !found.has(w.id));
-}

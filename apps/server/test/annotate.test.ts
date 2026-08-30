@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   annotateText,
   plainText,
-  unmatchedWords,
   type AnnotatableWord,
   type TextBlock,
 } from '../src/services/annotate.js';
@@ -159,18 +158,5 @@ describe('formatting and marking together', () => {
     expect(annotateText('', [word('w1', 'a', 'b')])).toEqual([]);
     expect(annotateText('   \n\n  ', [])).toEqual([]);
     expect(rendered(annotateText('Some text.', []))).toBe('Some text.');
-  });
-});
-
-describe('unmatchedWords', () => {
-  it('reports words the text never uses', () => {
-    const words = [word('w1', 'bridge', 'Brücke'), word('w2', 'ambush', 'Hinterhalt')];
-    const blocks = annotateText('The bridge stood.', words);
-    expect(unmatchedWords(blocks, words).map((w) => w.headwordEn)).toEqual(['ambush']);
-  });
-
-  it('is empty when everything was found', () => {
-    const words = [word('w1', 'bridge', 'x')];
-    expect(unmatchedWords(annotateText('The bridge.', words), words)).toEqual([]);
   });
 });

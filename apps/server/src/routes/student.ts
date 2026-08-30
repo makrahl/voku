@@ -24,7 +24,7 @@ import {
   type AttemptRow,
 } from '../services/attempts.js';
 import { includedWords, type TestRow } from '../services/tests.js';
-import { annotateText, unmatchedWords } from '../services/annotate.js';
+import { annotateText } from '../services/annotate.js';
 import type { Db } from '../db/index.js';
 
 export const studentRouter: Router = Router();
@@ -157,14 +157,10 @@ studentRouter.get(
       headwordEn: w.headword_en,
       translationDe: w.translation_de,
     }));
-    const blocks = annotateText(test.source_text, words);
-
     res.json({
       title: test.title,
       words,
-      blocks,
-      // Words the text never uses — a pasted list has no text at all.
-      alsoLearn: unmatchedWords(blocks, words),
+      blocks: annotateText(test.source_text, words),
     });
   }),
 );

@@ -205,6 +205,7 @@ function Home() {
 function StudyList() {
   const { testId = '' } = useParams();
   const navigate = useNavigate();
+  const [mode, setMode] = useState<'text' | 'list'>('text');
   const [showAll, setShowAll] = useState(false);
 
   const { data, isLoading } = useQuery({
@@ -214,24 +215,38 @@ function StudyList() {
         title: string;
         words: Array<{ id: string; headwordEn: string; translationDe: string }>;
         blocks: Block[];
-        alsoLearn: Array<{ id: string; headwordEn: string; translationDe: string }>;
       }>(student(`/tests/${testId}/words`)),
   });
 
+  // A test built from a pasted word list has no text to show.
   const hasText = (data?.blocks.length ?? 0) > 0;
+  const showing = hasText ? mode : 'list';
 
   return (
     <Screen>
       <header className="rule-b flex flex-wrap items-baseline justify-between gap-4 pb-5">
         <span className="label">{data?.title ?? 'Words to learn'}</span>
         <div className="flex items-center gap-6">
-          <button
-            type="button"
-            onClick={() => setShowAll((v) => !v)}
-            className={cx('label transition-colors', showAll ? '!text-ink' : 'hover:!text-ink')}
-          >
-            {showAll ? 'Hide translations' : 'Show all'}
-          </button>
+          {hasText
+            ? (
+                [
+                  ['text', 'In the text'],
+                  ['list', 'Word list'],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setMode(value)}
+                  className={cx(
+                    'label py-1 transition-colors',
+                    showing === value ? '!text-ink border-b-2 border-accent' : 'hover:!text-ink',
+                  )}
+                >
+                  {label}
+                </button>
+              ))
+            : null}
           <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
             Close
           </Button>
@@ -242,30 +257,30 @@ function StudyList() {
         <div className="py-12">
           <Spinner />
         </div>
+      ) : showing === 'text' ? (
+        <div className="flex flex-col gap-6 py-10">
+          <div className="flex flex-wrap items-baseline justify-between gap-4">
+            <p className="text-ink-40">Tap a coloured word to see what it means.</p>
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              className={cx('label transition-colors', showAll ? '!text-ink' : 'hover:!text-ink')}
+            >
+              {showAll ? 'Hide translations' : 'Show every translation'}
+            </button>
+          </div>
+          <StudyText blocks={data!.blocks} showAll={showAll} />
+        </div>
       ) : (
-        <div className="flex flex-col gap-12 py-10">
-          {hasText ? (
-            <section className="flex flex-col gap-5">
-              <p className="text-ink-40">
-                Tap a coloured word to see what it means.
-              </p>
-              <StudyText blocks={data!.blocks} showAll={showAll} />
-            </section>
-          ) : null}
-
-          {(hasText ? data!.alsoLearn : (data?.words ?? [])).length > 0 ? (
-            <section className="flex flex-col gap-5">
-              <span className="label">{hasText ? 'Also learn' : 'Words to learn'}</span>
-              <Rows>
-                {(hasText ? data!.alsoLearn : data!.words).map((word) => (
-                  <Row key={word.id}>
-                    <span className="flex-1 text-xl">{word.headwordEn}</span>
-                    <span className="flex-1 text-xl text-ink-60">{word.translationDe}</span>
-                  </Row>
-                ))}
-              </Rows>
-            </section>
-          ) : null}
+        <div className="py-10">
+          <Rows>
+            {(data?.words ?? []).map((word) => (
+              <Row key={word.id}>
+                <span className="flex-1 text-xl">{word.headwordEn}</span>
+                <span className="flex-1 text-xl text-ink-60">{word.translationDe}</span>
+              </Row>
+            ))}
+          </Rows>
         </div>
       )}
     </Screen>
