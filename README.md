@@ -46,7 +46,7 @@ npm run dev --workspace=@voku/web      # UI on :5173, proxies /api to :3000
 ```
 
 ```bash
-npm test          # 235 tests, no network required
+npm test          # 273 tests, no network required
 npm run typecheck
 ```
 
@@ -82,6 +82,15 @@ a single Node process serving both the API and the SPA.
 | Multiple choice · definition | yes — someone has to write the definition |
 | Fill in the blank | only if the word has no sentence in the source text |
 
+The source text understands light markdown — `#` headings, `**bold**`,
+`*italic*` — and students see the text itself with every trained word marked,
+tapping one for its translation and dictionary form. Formatting and highlights
+compose, so a word can be bold and trained at once.
+
+After a test, the results board shows **which words the class did not know**,
+with what students wrote instead. Rates count only students who reached the
+question, since in a sprint most never see the last few.
+
 ### Two signals, not one
 
 Word extraction returns **difficulty** (1–10) and **trickiness** (0–3) as
@@ -90,8 +99,9 @@ but honest; *become* is A1-easy and a total trap, since German *bekommen* means
 to receive.
 
 - **Difficulty** orders the sprint and drives the top-N cutoff.
-- **Trickiness** — or difficulty on its own, from 7 upwards — decides which
-  words become multiple choice.
+- **Trickiness** — or being among the harder words in that particular test —
+  decides which words become multiple choice. The threshold is relative
+  because models calibrate difficulty differently.
 
 That second rule is the anti-guessing mechanism. Wrong answers cost nothing, so
 tapping a random option would be free marks — unless multiple choice is reserved
@@ -162,7 +172,10 @@ rather than `cp`, because copying a live WAL database can produce a torn file.
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Optional. Seeds the Settings page |
 | `LLM_VISION_MODEL` | Optional. Only for photographing a page |
 
-The API key is stored server-side and is never sent back to the browser.
+The API key is stored server-side and is never sent back to the browser. The
+model is chosen from the provider's own catalogue in Settings, filtered as you
+type. **Avoid reasoning models** — they are slow enough to be unusable here and
+can spend their whole token budget thinking instead of answering.
 
 ---
 

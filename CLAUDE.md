@@ -20,7 +20,7 @@ Do not reverse these without asking. Each was chosen over a named alternative.
 |---|---|
 | **Strict spelling.** `recieve` is wrong. | Spelling is what German learners get wrong. Made liveable by the bulk-regrade panel, which is therefore load-bearing, not a nicety. |
 | **No question shuffling.** Identical order for the whole class. | Makes position 12 comparable across students. Copying is possible; the clock does the policing. |
-| **Multiple choice only for traps or hard words** (trickiness ≥ 2, or difficulty ≥ 7). | Wrong answers cost nothing, so MCQ on an easy word is free marks. It is never used to make a word easier. |
+| **Multiple choice only for traps or hard words** — trickiness ≥ 2, or difficulty in the top 40% of *this test* (floor 4). | Wrong answers cost nothing, so MCQ on an easy word is free marks. The threshold is relative because models calibrate differently; a fixed cutoff silently emptied both MCQ formats when one scored conservatively. |
 | **Format mix is preferences, not quotas.** | A text with three tricky words cannot support ten MCQs. The composer reports the shortfall instead of inventing traps. |
 | **No behavioural telemetry.** Nothing records app-switching. | Monitoring minors, false-positives on notifications. The only personal data is a first name and a score. |
 | **The live board is private to the teacher.** | A leaderboard would publicly identify the same struggling students every week. |
@@ -53,7 +53,7 @@ is not an instrument for certifying that every student met every word.
 
 ## Testing
 
-`npm test` runs 235 tests with no network access. Integration tests drive the
+`npm test` runs 273 tests with no network access. Integration tests drive the
 real Express app over real HTTP on an ephemeral port against an in-memory
 database — cookies, middleware order and JSON parsing are exercised, not
 stubbed. `test/mock-llm.ts` stands in for an OpenAI-compatible provider, so the
@@ -80,18 +80,38 @@ by two colours.
 
 ## Things that are genuinely unfinished
 
-- **No real LLM call has ever been made.** Both passes are tested against a mock,
-  including the retry-on-malformed-JSON path, but prompt quality — whether the
-  distractors actually bite — has never been checked against a live model. Do
-  this before trusting it in front of a class.
+- **Near-synonym distractors.** For adverbs of degree the model still offers
+  wrong answers that are also correct — "kaum → scarcely" against *barely*,
+  *rarely*, *hardly ever*. The distractor prompt names this exact failure and it
+  fixed the other cases but not this one. The review step is the backstop.
 - **The UI has never been seen rendered.** It has been verified by driving the
-  API and inspecting the compiled CSS. Layout judgements are inference.
+  API and inspecting the compiled CSS. Layout judgements are inference, and
+  several real bugs have come from that — a heading that scrolled instead of
+  wrapping, progress shown off screen, text below the contrast floor.
 - `Help` is a stub with section headings and an honest "not written yet".
 - Fill-in-the-blank needs a context sentence, and there is no UI field for one,
   so that format is effectively AI-only.
+- No export. "Can I get these into my markbook?" has no answer yet.
+- No teacher preview: nobody can see a test as a student sees it without a
+  second browser profile.
 - Passkeys were deliberately deferred. Credentials live entirely in
   `services/auth.ts`; nothing in the invite or role code assumes a password, so
   WebAuthn is additive when wanted.
+
+## What a real model taught us
+
+Everything below came from running against a live provider, and none of it was
+visible against the mock.
+
+- **Model choice dominates.** A reasoning model took 138 seconds per pass and
+  intermittently returned null content; `openai/gpt-5.4-mini` does the same work
+  in 6–12 seconds. Reasoning tokens count against `max_tokens`, so a model can
+  spend its whole budget thinking and never answer — that case is retried and
+  reported in plain words.
+- **Every LLM call needs a timeout.** Without one a hung provider leaves a job
+  in `running` for ever, which is indistinguishable from thinking.
+- **Difficulty is an opinion, not a measurement.** Hence the relative threshold
+  above.
 
 ## Conventions
 
