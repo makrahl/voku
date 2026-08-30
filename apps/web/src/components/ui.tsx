@@ -27,12 +27,10 @@ export function Label({ children }: { children: ReactNode }) {
 }
 
 /**
- * A page heading you can type into. Styled as the heading it replaces, with the
- * underline appearing only on hover and focus — which keeps the flat plane
- * intact while still signalling that the text is a control.
+ * A page heading you can type into. A textarea, not an input: headings wrap,
+ * and a long title in a single-line field scrolls sideways out of view instead.
  *
- * Commits on blur or Enter, reverts on Escape, and ignores an empty value
- * rather than letting something be renamed to nothing.
+ * Commits on blur or Enter, reverts on Escape, and refuses an empty value.
  */
 export function EditableHeading({
   value,
@@ -49,9 +47,17 @@ export function EditableHeading({
   size?: 'hero' | 'row';
 }) {
   const [draft, setDraft] = useState(value);
+  const field = useRef<HTMLTextAreaElement>(null);
 
-  // Follow the server's value when it changes underneath us.
+  const fit = () => {
+    const el = field.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
   useEffect(() => setDraft(value), [value]);
+  useEffect(fit, [draft, size]);
 
   const commit = () => {
     const next = draft.trim();
@@ -63,25 +69,32 @@ export function EditableHeading({
   };
 
   return (
-    <input
+    <textarea
+      ref={field}
+      rows={1}
       value={draft}
       disabled={disabled}
       aria-label={ariaLabel}
+      spellCheck={false}
       onChange={(event) => setDraft(event.target.value)}
       onBlur={commit}
       onKeyDown={(event) => {
-        if (event.key === 'Enter') event.currentTarget.blur();
+        // A title is one line; Enter commits rather than adding a break.
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          event.currentTarget.blur();
+        }
         if (event.key === 'Escape') {
           setDraft(value);
           event.currentTarget.blur();
         }
       }}
       className={cx(
-        'border-b border-transparent bg-transparent px-0 text-ink',
+        'block w-full resize-none overflow-hidden border-b border-transparent bg-transparent px-0 text-ink',
         'focus:border-accent focus:outline-none',
         size === 'hero'
-          ? 'w-full max-w-2xl py-1 text-hero font-semibold tracking-tight'
-          : 'w-full text-xl',
+          ? 'max-w-3xl py-1 text-hero font-semibold tracking-tight'
+          : 'text-xl leading-snug',
         !disabled && 'hover:border-hairline-strong',
         disabled && 'cursor-default',
       )}

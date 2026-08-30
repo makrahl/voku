@@ -32,12 +32,13 @@
   /* One face throughout. There is no display alias, because there is no second face. */
   --font-sans: 'Inter Variable', Inter, system-ui, sans-serif;
 
-  /* The core word on a quiz screen; the score on a result screen. */
-  --text-display: 5.25rem;
+  /* The core word on a quiz screen; the score on a result screen. Fluid, so a
+     long word or title shrinks rather than running off a narrow screen. */
+  --text-display: clamp(3rem, 8vw, 5.25rem);
   --text-display--line-height: 1;
   --text-display--letter-spacing: -0.035em;
-  --text-hero: 3.5rem;
-  --text-hero--line-height: 1.04;
+  --text-hero: clamp(2.125rem, 5vw, 3.5rem);
+  --text-hero--line-height: 1.08;
   --text-hero--letter-spacing: -0.03em;
 }
 
