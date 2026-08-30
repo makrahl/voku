@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RejectedAnswerGroup, ResultsView } from '@voku/shared';
 import { ApiError, admin, api } from '../lib/api.ts';
 import { Button, Empty, ErrorText, Row, Rows, Spinner, Status, cx } from '../components/ui.tsx';
+import { QuestionStats } from './QuestionStats.tsx';
 
 const STATE_LABEL = {
   not_started: 'not started',
@@ -38,6 +39,17 @@ export function Board() {
     mutationFn: (attemptId: string) =>
       api.post(admin(`/tests/${testId}/attempts/${attemptId}/reset`)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'results', testId] }),
+  });
+
+  // The board polls while a test is open; keep the stats in step with it.
+  useQuery({
+    queryKey: ['admin', 'question-stats-tick', testId],
+    queryFn: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'question-stats', testId] });
+      return Date.now();
+    },
+    refetchInterval: results.data?.test.status === 'open' ? 5000 : false,
+    enabled: results.data?.test.status === 'open',
   });
 
   if (results.isLoading) return <Spinner />;
@@ -113,6 +125,10 @@ export function Board() {
           </Row>
         ))}
       </Rows>
+
+      {/* Live too: seeing half the class stall on question 7 is useful while
+          it is still happening. */}
+      <QuestionStats testId={testId} />
 
       {test.status === 'closed' ? <RegradePanel testId={testId} /> : null}
     </div>

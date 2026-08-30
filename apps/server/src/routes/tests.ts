@@ -35,6 +35,7 @@ import {
   type WordRow,
 } from '../services/tests.js';
 import { acceptVariant, rejectedAnswers, repeatCandidates } from '../services/regrade.js';
+import { testStats } from '../services/stats.js';
 import { createJob, startJob } from '../services/jobs.js';
 import { getLlmConfig, isLlmConfigured } from '../services/settings.js';
 import { extractWords, generateWithLlm, regenerateOne, transcribeImages } from '../services/llm/compose.js';
@@ -518,6 +519,15 @@ testsRouter.post(
 // ---------------------------------------------------------------------------
 // After the test: bulk regrade, and carrying words into the next one
 // ---------------------------------------------------------------------------
+
+/** Which words the class did not know — the question a teacher asks next. */
+testsRouter.get(
+  '/:id/question-stats',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    res.json(testStats(req.db, test.id));
+  }),
+);
 
 testsRouter.get(
   '/:id/rejected-answers',
