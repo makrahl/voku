@@ -30,6 +30,7 @@ import {
 } from '../tests.js';
 import type { JobReporter } from '../jobs.js';
 import { chatJson, type LlmConfig } from './client.js';
+import { plainText } from '../annotate.js';
 import {
   DEFINITION_SYSTEM,
   DISTRACTOR_SYSTEM,
@@ -100,7 +101,8 @@ export async function extractWords(
   level: CefrLevel,
   maxWords: number,
 ): Promise<{ added: number }> {
-  const text = test.source_text.trim();
+  // Markers would only distract the model.
+  const text = plainText(test.source_text).trim();
   if (!text) throw conflict('Add the text first.');
 
   const result = await chatJson(config, {

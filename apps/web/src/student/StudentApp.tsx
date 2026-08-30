@@ -10,7 +10,7 @@ import type {
 } from '@voku/shared';
 import { ApiError, api, student } from '../lib/api.ts';
 import { Button, Empty, Rows, Row, Spinner, Status, Wordmark, cx } from '../components/ui.tsx';
-import { StudyText, type Segment } from './StudyText.tsx';
+import { StudyText, type Block } from './StudyText.tsx';
 import {
   Countdown,
   FeedbackFlash,
@@ -213,12 +213,12 @@ function StudyList() {
       api.get<{
         title: string;
         words: Array<{ id: string; headwordEn: string; translationDe: string }>;
-        segments: Segment[];
+        blocks: Block[];
         alsoLearn: Array<{ id: string; headwordEn: string; translationDe: string }>;
       }>(student(`/tests/${testId}/words`)),
   });
 
-  const hasText = (data?.segments.length ?? 0) > 0;
+  const hasText = (data?.blocks.length ?? 0) > 0;
 
   return (
     <Screen>
@@ -249,7 +249,7 @@ function StudyList() {
               <p className="text-ink-40">
                 Tap any underlined word to see what it means.
               </p>
-              <StudyText segments={data!.segments} showAll={showAll} />
+              <StudyText blocks={data!.blocks} showAll={showAll} />
             </section>
           ) : null}
 

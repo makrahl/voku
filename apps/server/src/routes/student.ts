@@ -157,14 +157,14 @@ studentRouter.get(
       headwordEn: w.headword_en,
       translationDe: w.translation_de,
     }));
-    const segments = annotateText(test.source_text, words);
+    const blocks = annotateText(test.source_text, words);
 
     res.json({
       title: test.title,
       words,
-      segments,
+      blocks,
       // Words the text never uses — a pasted list has no text at all.
-      alsoLearn: unmatchedWords(segments, words),
+      alsoLearn: unmatchedWords(blocks, words),
     });
   }),
 );

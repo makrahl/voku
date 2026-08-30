@@ -135,7 +135,7 @@ describe('the student home screen', () => {
     expect(study.body.words).toHaveLength(12);
     expect(study.body.words[0]).toHaveProperty('translationDe');
     // Pasted from a word list, so there is no text to mark up.
-    expect(study.body.segments).toEqual([]);
+    expect(study.body.blocks).toEqual([]);
     expect(study.body.alsoLearn).toHaveLength(12);
   });
 

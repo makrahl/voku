@@ -329,7 +329,7 @@ function TextStep({
     <div className="flex flex-col gap-5">
       <Field
         label="The text"
-        hint="Paste whatever you are reading with the class. This is only used to find the words."
+        hint="Paste whatever you are reading with the class. Students see it too, with the trained words marked. # heading, **bold** and *italic* work; a blank line starts a paragraph."
       >
         <Textarea
           value={text}
