@@ -83,6 +83,80 @@ describe('settings', () => {
   });
 });
 
+describe('the model catalogue', () => {
+  it('lists what the provider offers, slimmed to what a chooser needs', async () => {
+    const res = await server.get('/api/admin/settings/llm/models');
+    expect(res.status).toBe(200);
+
+    const byId = Object.fromEntries(res.body.models.map((m: { id: string }) => [m.id, m]));
+    expect(byId['anthropic/claude-sonnet-4.5']).toEqual({
+      id: 'anthropic/claude-sonnet-4.5',
+      name: 'Anthropic: Claude Sonnet 4.5',
+      contextLength: 200000,
+      vision: true,
+      promptPricePerMillion: 3,
+    });
+  });
+
+  it('understands both ways a provider can describe image support', async () => {
+    const byId = Object.fromEntries(
+      (await server.get('/api/admin/settings/llm/models')).body.models.map((m: { id: string }) => [
+        m.id,
+        m,
+      ]),
+    );
+    // input_modalities array, and the older "text+image->text" string.
+    expect(byId['anthropic/claude-sonnet-4.5'].vision).toBe(true);
+    expect(byId['legacy/vision-1'].vision).toBe(true);
+    expect(byId['meta/llama-3-70b'].vision).toBe(false);
+  });
+
+  it('copes with a bare entry and skips one with no id', async () => {
+    const models = (await server.get('/api/admin/settings/llm/models')).body.models;
+
+    expect(models.find((m: { id: string }) => m.id === 'local/bare-model')).toEqual({
+      id: 'local/bare-model',
+      name: 'local/bare-model', // falls back to the id
+      contextLength: null,
+      vision: false,
+      promptPricePerMillion: null,
+    });
+    expect(models).toHaveLength(4);
+  });
+
+  it('reports a free model as zero rather than unknown', async () => {
+    const models = (await server.get('/api/admin/settings/llm/models')).body.models;
+    const llama = models.find((m: { id: string }) => m.id === 'meta/llama-3-70b');
+    expect(llama.promptPricePerMillion).toBe(0);
+  });
+
+  it('explains a provider that refuses to list', async () => {
+    llm.failNext(401, '{"error":"needs a key"}');
+    const res = await server.get('/api/admin/settings/llm/models');
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toContain('Check the URL');
+  });
+
+  it('can be browsed with a URL that has not been saved yet', async () => {
+    // Point the stored config somewhere useless, then pass the real one.
+    await server.request('PUT', '/api/admin/settings/llm', { baseUrl: 'https://nowhere.invalid/v1' });
+    const res = await server.get(
+      `/api/admin/settings/llm/models?baseUrl=${encodeURIComponent(llm.baseUrl)}`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.models.length).toBeGreaterThan(0);
+  });
+
+  it('is admin-only, like the rest of the model settings', async () => {
+    const invite = (await server.post('/api/admin/team/invites', { email: 'plain@school.de' })).body;
+    server.clearCookies();
+    await server.post(`/api/invites/${invite.id}/accept`, { password: 'a-long-enough-password' });
+
+    expect((await server.get('/api/admin/settings/llm/models')).status).toBe(403);
+  });
+});
+
 describe('AI buttons without a key', () => {
   it('refuse rather than failing silently, and point at the manual path', async () => {
     await server.request('PUT', '/api/admin/settings/llm', { apiKey: '' });

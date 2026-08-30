@@ -139,6 +139,45 @@ export async function startMockLlm(): Promise<MockLlm> {
   let failure: { status: number; body: string } | null = null;
 
   const server: Server = createServer((req, res) => {
+    // The catalogue endpoint of the OpenAI-compatible dialect.
+    if (req.method === 'GET' && req.url?.endsWith('/models')) {
+      if (failure) {
+        const { status, body } = failure;
+        failure = null;
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(body);
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          data: [
+            {
+              id: 'anthropic/claude-sonnet-4.5',
+              name: 'Anthropic: Claude Sonnet 4.5',
+              context_length: 200000,
+              architecture: { input_modalities: ['text', 'image'] },
+              pricing: { prompt: '0.000003' },
+            },
+            {
+              id: 'meta/llama-3-70b',
+              name: 'Meta: Llama 3 70B',
+              context_length: 8192,
+              architecture: { input_modalities: ['text'] },
+              pricing: { prompt: '0' },
+            },
+            // Older providers describe modality as a single string.
+            { id: 'legacy/vision-1', architecture: { modality: 'text+image->text' } },
+            // A bare entry, which is all some local servers return.
+            { id: 'local/bare-model' },
+            // Junk that must not crash the parser.
+            { name: 'no id at all' },
+          ],
+        }),
+      );
+      return;
+    }
+
     let raw = '';
     req.on('data', (chunk) => (raw += chunk));
     req.on('end', () => {

@@ -4,6 +4,7 @@ import { param, parseBody, route } from '../http.js';
 import { requireAdmin, requireTeacher } from '../middleware/auth.js';
 import { getLlmConfig, getLlmPublic, isLlmConfigured, setLlmConfig } from '../services/settings.js';
 import { testConnection } from '../services/llm/client.js';
+import { listModels } from '../services/llm/models.js';
 import { jobView } from '../services/jobs.js';
 
 const LlmPatchSchema = z.object({
@@ -43,6 +44,22 @@ settingsRouter.put(
   route((req, res) => {
     setLlmConfig(req.db, parseBody(LlmPatchSchema, req.body));
     res.json({ ...getLlmPublic(req.db), configured: isLlmConfigured(req.db) });
+  }),
+);
+
+/**
+ * The provider's catalogue, for the model chooser. Accepts a base URL and key
+ * as query parameters so the list can be browsed while typing them in, before
+ * anything has been saved.
+ */
+settingsRouter.get(
+  '/llm/models',
+  requireAdmin,
+  route(async (req, res) => {
+    const stored = getLlmConfig(req.db);
+    const baseUrl = typeof req.query.baseUrl === 'string' && req.query.baseUrl ? req.query.baseUrl : stored.baseUrl;
+    const apiKey = typeof req.query.apiKey === 'string' && req.query.apiKey ? req.query.apiKey : stored.apiKey;
+    res.json({ models: await listModels({ ...stored, baseUrl, apiKey }) });
   }),
 );
 

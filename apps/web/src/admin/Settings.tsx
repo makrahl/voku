@@ -4,6 +4,7 @@ import type { LlmSettingsPublic } from '@voku/shared';
 import { ApiError, admin, api } from '../lib/api.ts';
 import { Button, ErrorText, Field, Input, Note, Spinner, Status } from '../components/ui.tsx';
 import { AdminSection } from './AdminSection.tsx';
+import { Combobox, type Choice } from '../components/Combobox.tsx';
 
 type Settings = LlmSettingsPublic & { configured: boolean };
 
@@ -41,6 +42,50 @@ export function LlmSettings() {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'llm'] });
     },
   });
+
+  /**
+   * The provider's catalogue. Fetched with whatever URL and key are currently
+   * typed rather than only what is saved, so the list is usable while setting
+   * a provider up for the first time.
+   */
+  const models = useQuery({
+    queryKey: ['admin', 'llm-models', form.baseUrl, form.apiKey ? 'typed' : 'stored'],
+    queryFn: () =>
+      api.get<{ models: Array<{
+        id: string;
+        name: string;
+        contextLength: number | null;
+        vision: boolean;
+        promptPricePerMillion: number | null;
+      }> }>(
+        admin(
+          `/settings/llm/models?baseUrl=${encodeURIComponent(form.baseUrl)}` +
+            (form.apiKey ? `&apiKey=${encodeURIComponent(form.apiKey)}` : ''),
+        ),
+      ),
+    enabled: Boolean(form.baseUrl),
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+
+  const choices: Choice[] = (models.data?.models ?? []).map((m) => ({
+    id: m.id,
+    name: m.name,
+    tag: m.vision ? 'vision' : undefined,
+    meta: [
+      m.contextLength ? `${Math.round(m.contextLength / 1000)}k` : null,
+      m.promptPricePerMillion !== null
+        ? m.promptPricePerMillion === 0
+          ? 'free'
+          : `$${m.promptPricePerMillion.toFixed(2)}/M`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  }));
+
+  // Photographing a page needs a model that can actually read one.
+  const visionChoices = choices.filter((c) => c.tag === 'vision');
 
   const test = useMutation({
     mutationFn: () => api.post<{ ok: boolean; model: string }>(admin('/settings/llm/test')),
@@ -84,21 +129,35 @@ export function LlmSettings() {
           />
         </Field>
 
-        <Field label="Model">
-          <Input
+        <Field
+          label="Model"
+          hint={
+            models.error
+              ? 'Could not list models from this provider — type the name yourself.'
+              : models.data
+                ? `${choices.length} available. Start typing to filter.`
+                : undefined
+          }
+        >
+          <Combobox
             value={form.model}
+            onChange={(model) => setForm({ ...form, model })}
+            choices={choices}
+            loading={models.isFetching}
             placeholder="anthropic/claude-sonnet-4.5"
-            onChange={(e) => setForm({ ...form, model: e.target.value })}
           />
         </Field>
 
         <Field
           label="Vision model (optional)"
-          hint="Only used for photographing a textbook page. Leave blank to use the model above."
+          hint="Only for photographing a textbook page. Leave blank to use the model above — most can already read images."
         >
-          <Input
+          <Combobox
             value={form.visionModel}
-            onChange={(e) => setForm({ ...form, visionModel: e.target.value })}
+            onChange={(visionModel) => setForm({ ...form, visionModel })}
+            choices={visionChoices}
+            loading={models.isFetching}
+            placeholder="same as above"
           />
         </Field>
 
