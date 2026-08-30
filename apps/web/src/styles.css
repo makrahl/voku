@@ -14,10 +14,16 @@
 @theme {
   --color-paper: #fafaf8;
   --color-ink: #161613;
-  /* Secondary and meta text, per the brief's .4–.6 alpha range. */
-  --color-ink-60: rgba(22, 22, 19, 0.6);
-  --color-ink-40: rgba(22, 22, 19, 0.4);
-  --color-ink-25: rgba(22, 22, 19, 0.25);
+  /*
+   * Muted text. The brief's .4 floor measures 2.54:1 on this background, which
+   * fails WCAG at any size, so these are raised to the lowest values that pass
+   * AA while keeping the hierarchy: 4.99:1 and 7.86:1. The names are kept as
+   * step labels, not literal alphas.
+   */
+  --color-ink-60: rgba(22, 22, 19, 0.75);
+  --color-ink-40: rgba(22, 22, 19, 0.62);
+  /* Placeholders and disabled controls only — never content. */
+  --color-ink-25: rgba(22, 22, 19, 0.32);
   --color-hairline: rgba(22, 22, 19, 0.14);
   --color-hairline-strong: rgba(22, 22, 19, 0.28);
   --color-accent: #c65d3b;

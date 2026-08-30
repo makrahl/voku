@@ -156,7 +156,7 @@ export function Team({ meId }: { meId: string }) {
               <Row key={row.id}>
                 <div className="min-w-48 flex-1">
                   <p className="text-lg">{row.email}</p>
-                  <p className="truncate text-sm text-ink-25">{row.url}</p>
+                  <p className="truncate text-sm text-ink-40">{row.url}</p>
                 </div>
                 {row.isAdmin ? <Status tone="accent">admin</Status> : null}
                 {row.expired ? <Status tone="quiet">expired</Status> : null}
@@ -182,7 +182,7 @@ export function Team({ meId }: { meId: string }) {
               <Row key={teacher.id}>
                 <span className="min-w-48 flex-1 text-lg">
                   {teacher.email}
-                  {teacher.id === meId ? <span className="text-ink-25"> — you</span> : null}
+                  {teacher.id === meId ? <span className="text-ink-40"> — you</span> : null}
                 </span>
                 <span className="text-sm text-ink-40">
                   {teacher.classCount} {teacher.classCount === 1 ? 'class' : 'classes'}

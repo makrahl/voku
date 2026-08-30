@@ -33,7 +33,7 @@ const TYPE_SHORT: Record<QuestionType, string> = {
 
 /** Empty bar reads as trouble without needing a second colour. */
 function Rate({ rate }: { rate: number | null }) {
-  if (rate === null) return <span className="w-28 text-right text-sm text-ink-25">not reached</span>;
+  if (rate === null) return <span className="w-28 text-right text-sm text-ink-40">not reached</span>;
   return (
     <span className="flex w-28 shrink-0 items-center gap-3">
       <span className="relative h-1 flex-1 bg-hairline">
@@ -123,7 +123,7 @@ export function QuestionStats({ testId }: { testId: string }) {
       <Rows>
         {sorted.map((q) => (
           <Row key={q.questionId}>
-            <span className="tabular w-7 shrink-0 text-sm text-ink-25">
+            <span className="tabular w-7 shrink-0 text-sm text-ink-40">
               {String(q.orderIndex + 1).padStart(2, '0')}
             </span>
 

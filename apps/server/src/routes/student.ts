@@ -24,6 +24,7 @@ import {
   type AttemptRow,
 } from '../services/attempts.js';
 import { includedWords, type TestRow } from '../services/tests.js';
+import { annotateText, unmatchedWords } from '../services/annotate.js';
 import type { Db } from '../db/index.js';
 
 export const studentRouter: Router = Router();
@@ -150,12 +151,21 @@ studentRouter.get(
     if (test.status === 'open' || test.status === 'draft') {
       throw forbidden('The word list is not available right now.');
     }
-    res.json(
-      includedWords(req.db, test.id).map((w) => ({
-        headwordEn: w.headword_en,
-        translationDe: w.translation_de,
-      })),
-    );
+
+    const words = includedWords(req.db, test.id).map((w) => ({
+      id: w.id,
+      headwordEn: w.headword_en,
+      translationDe: w.translation_de,
+    }));
+    const segments = annotateText(test.source_text, words);
+
+    res.json({
+      title: test.title,
+      words,
+      segments,
+      // Words the text never uses — a pasted list has no text at all.
+      alsoLearn: unmatchedWords(segments, words),
+    });
   }),
 );
 

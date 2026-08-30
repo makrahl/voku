@@ -10,6 +10,7 @@ import type {
 } from '@voku/shared';
 import { ApiError, api, student } from '../lib/api.ts';
 import { Button, Empty, Rows, Row, Spinner, Status, Wordmark, cx } from '../components/ui.tsx';
+import { StudyText, type Segment } from './StudyText.tsx';
 import {
   Countdown,
   FeedbackFlash,
@@ -189,7 +190,7 @@ function Home() {
                   <span className="flex-1 text-xl">{attempt.testTitle}</span>
                   <span className="tabular text-2xl font-semibold tracking-tight">
                     {attempt.correctCount}
-                    <span className="text-ink-25">/{attempt.targetCount}</span>
+                    <span className="text-ink-40">/{attempt.targetCount}</span>
                   </span>
                 </Row>
               ))}
@@ -204,36 +205,69 @@ function Home() {
 function StudyList() {
   const { testId = '' } = useParams();
   const navigate = useNavigate();
+  const [showAll, setShowAll] = useState(false);
+
   const { data, isLoading } = useQuery({
     queryKey: ['student', 'words', testId],
     queryFn: () =>
-      api.get<Array<{ headwordEn: string; translationDe: string }>>(
-        student(`/tests/${testId}/words`),
-      ),
+      api.get<{
+        title: string;
+        words: Array<{ id: string; headwordEn: string; translationDe: string }>;
+        segments: Segment[];
+        alsoLearn: Array<{ id: string; headwordEn: string; translationDe: string }>;
+      }>(student(`/tests/${testId}/words`)),
   });
+
+  const hasText = (data?.segments.length ?? 0) > 0;
 
   return (
     <Screen>
-      <header className="rule-b flex items-baseline justify-between pb-5">
-        <span className="label">Words to learn</span>
-        <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
-          Close
-        </Button>
+      <header className="rule-b flex flex-wrap items-baseline justify-between gap-4 pb-5">
+        <span className="label">{data?.title ?? 'Words to learn'}</span>
+        <div className="flex items-center gap-6">
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className={cx('label transition-colors', showAll ? '!text-ink' : 'hover:!text-ink')}
+          >
+            {showAll ? 'Hide translations' : 'Show all'}
+          </button>
+          <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
+            Close
+          </Button>
+        </div>
       </header>
-      <div className="py-12">
-        {isLoading ? (
+
+      {isLoading ? (
+        <div className="py-12">
           <Spinner />
-        ) : (
-          <Rows>
-            {(data ?? []).map((word) => (
-              <Row key={word.headwordEn}>
-                <span className="flex-1 text-xl">{word.headwordEn}</span>
-                <span className="flex-1 text-xl text-ink-60">{word.translationDe}</span>
-              </Row>
-            ))}
-          </Rows>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-12 py-10">
+          {hasText ? (
+            <section className="flex flex-col gap-5">
+              <p className="text-ink-40">
+                Tap any underlined word to see what it means.
+              </p>
+              <StudyText segments={data!.segments} showAll={showAll} />
+            </section>
+          ) : null}
+
+          {(hasText ? data!.alsoLearn : (data?.words ?? [])).length > 0 ? (
+            <section className="flex flex-col gap-5">
+              <span className="label">{hasText ? 'Also learn' : 'Words to learn'}</span>
+              <Rows>
+                {(hasText ? data!.alsoLearn : data!.words).map((word) => (
+                  <Row key={word.id}>
+                    <span className="flex-1 text-xl">{word.headwordEn}</span>
+                    <span className="flex-1 text-xl text-ink-60">{word.translationDe}</span>
+                  </Row>
+                ))}
+              </Rows>
+            </section>
+          ) : null}
+        </div>
+      )}
     </Screen>
   );
 }
@@ -544,10 +578,10 @@ function Review() {
         <Rows>
           {data.questions.map((row) => (
             <Row key={row.id}>
-              <span className="tabular w-8 text-sm text-ink-25">
+              <span className="tabular w-8 text-sm text-ink-40">
                 {String(row.orderIndex + 1).padStart(2, '0')}
               </span>
-              <span className={cx('flex-1 text-lg', !row.reached && 'text-ink-25')}>
+              <span className={cx('flex-1 text-lg', !row.reached && 'text-ink-40')}>
                 {promptOf(row.payload)}
               </span>
               {row.reached && row.correct === false ? (
@@ -558,7 +592,7 @@ function Review() {
                   'w-44 text-right text-lg',
                   // Terracotta means "this is the right answer", consistently.
                   row.correct === true ? 'text-accent' : 'text-ink',
-                  !row.reached && 'text-ink-25',
+                  !row.reached && 'text-ink-40',
                 )}
               >
                 {row.correctAnswer}

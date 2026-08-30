@@ -519,7 +519,7 @@ function WordsStep({
                   className="size-5 accent-[var(--color-accent)]"
                   aria-label={`Include ${word.headwordEn}`}
                 />
-                <span className="tabular w-6 text-sm text-ink-25">{word.difficulty}</span>
+                <span className="tabular w-6 text-sm text-ink-60">{word.difficulty}</span>
                 <span className="min-w-32 flex-1 text-lg">{word.headwordEn}</span>
                 <span className="min-w-32 flex-1 text-lg text-ink-60">{word.translationDe}</span>
                 {word.origin === 'repeat' ? <Status tone="quiet">repeat</Status> : null}
@@ -537,7 +537,7 @@ function WordsStep({
                     'border px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.12em] transition-colors',
                     word.trickiness >= 2
                       ? 'border-accent text-accent'
-                      : 'border-hairline text-ink-25 hover:border-ink hover:text-ink-60',
+                      : 'border-hairline text-ink-40 hover:border-ink hover:text-ink',
                   )}
                 >
                   trap
@@ -628,7 +628,7 @@ function RepeatPicker({ test, onImported }: { test: TestView; onImported: () => 
                 <span
                   className={cx(
                     'tabular text-sm',
-                    c.correctRate === null ? 'text-ink-25' : 'text-ink-60',
+                    c.correctRate === null ? 'text-ink-40' : 'text-ink-60',
                   )}
                 >
                   {c.correctRate === null ? 'not reached' : `${c.correctRate}% right`}
@@ -850,7 +850,7 @@ function QuestionsStep({
               <div className="rule-b flex flex-col gap-4 py-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-baseline gap-3">
-                    <span className="tabular text-sm text-ink-25">
+                    <span className="tabular text-sm text-ink-40">
                       {String(question.orderIndex + 1).padStart(2, '0')}
                     </span>
                     <div>
