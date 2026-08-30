@@ -86,6 +86,28 @@ export function startJob(db: Db, jobId: string, work: (report: JobReporter) => P
   })();
 }
 
+/**
+ * The job still running for a test, if any.
+ *
+ * Work happens on the server, so the browser must be able to walk away and come
+ * back — switching composer steps, reloading, or returning to a background tab
+ * should all rejoin the job in progress rather than lose sight of it.
+ */
+export function activeJob(db: Db, testId: string): JobView | null {
+  // Includes a recent failure, not only work in flight: a job that died needs to
+  // say so somewhere the teacher will see it. Without this the UI simply stops,
+  // which is indistinguishable from it still thinking.
+  const row = db.get<JobRow>(
+    `SELECT * FROM jobs
+      WHERE test_id = :t
+        AND (status IN ('queued', 'running')
+             OR (status = 'error' AND updated_at > :recent))
+      ORDER BY created_at DESC LIMIT 1`,
+    { t: testId, recent: new Date(Date.now() - 10 * 60_000).toISOString() },
+  );
+  return row ? jobView(db, row.id) : null;
+}
+
 /** A job left running when the process restarted can never finish. */
 export function failStaleJobs(db: Db): number {
   return db.run(

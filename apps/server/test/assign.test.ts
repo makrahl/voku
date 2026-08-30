@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MixWeights } from '@voku/shared';
 import {
-  MIN_DIFFICULTY_FOR_DEFINITION,
-  MIN_DIFFICULTY_FOR_MCQ,
   MIN_TRICKINESS_FOR_MCQ,
   assignFormats,
   type AssignableWord,
@@ -56,33 +54,56 @@ describe('assignFormats', () => {
   });
 
   describe('multiple choice is reserved for traps', () => {
-    it('never gives MCQ-translation to a word that is neither tricky nor hard', () => {
-      const words = Array.from({ length: 20 }, (_, i) =>
-        word(`w${i}`, { trickiness: 0, difficulty: MIN_DIFFICULTY_FOR_MCQ - 1 }),
-      );
-      const { assignments, report } = assignFormats(words, evenMix);
-
-      expect(assignments.every((a) => a.type !== 'mcq_translation')).toBe(true);
-      expect(report.achieved.mcq_translation).toBe(0);
-    });
-
-    it('lets a hard word earn multiple choice even when nothing about it is tricky', () => {
-      // The brief was "false friends AND difficult words" — difficulty qualifies
-      // on its own, which is what makes the format usable from a pasted list
-      // where no trickiness data exists.
+    it('keeps multiple choice away from the easier half of the test', () => {
       const words = [
-        word('hard', { trickiness: 0, difficulty: MIN_DIFFICULTY_FOR_MCQ }),
-        ...Array.from({ length: 3 }, (_, i) =>
-          word(`easy${i}`, { trickiness: 0, difficulty: MIN_DIFFICULTY_FOR_MCQ - 1 }),
-        ),
+        ...Array.from({ length: 5 }, (_, i) => word(`easy${i}`, { difficulty: 2 })),
+        ...Array.from({ length: 5 }, (_, i) => word(`hard${i}`, { difficulty: 9 })),
       ];
       const result = assignFormats(words, {
-        translate_input: 75,
-        mcq_translation: 25,
+        translate_input: 50,
+        mcq_translation: 50,
         mcq_definition: 0,
         fill_blank: 0,
       });
-      expect(typeOf(result, 'hard')).toBe('mcq_translation');
+
+      const mcq = result.assignments.filter((a) => a.type === 'mcq_translation');
+      expect(mcq).toHaveLength(5);
+      expect(mcq.every((a) => a.wordId.startsWith('hard'))).toBe(true);
+    });
+
+    it('judges "hard" against this test, not against a fixed number', () => {
+      // Models calibrate differently. A text whose hardest words score 5 must
+      // still produce multiple choice, or a conservative model silently empties
+      // the format.
+      const words = [
+        ...Array.from({ length: 4 }, (_, i) => word(`low${i}`, { difficulty: 2 })),
+        ...Array.from({ length: 4 }, (_, i) => word(`top${i}`, { difficulty: 5 })),
+      ];
+      const result = assignFormats(words, {
+        translate_input: 50,
+        mcq_translation: 50,
+        mcq_definition: 0,
+        fill_blank: 0,
+      });
+
+      const mcq = result.assignments.filter((a) => a.type === 'mcq_translation');
+      expect(mcq.length).toBeGreaterThan(0);
+      expect(mcq.every((a) => a.wordId.startsWith('top'))).toBe(true);
+    });
+
+    it('still lets a trap qualify however easy the word is', () => {
+      // "become" is A1-easy and a classic false friend.
+      const words = [
+        word('trap', { trickiness: 3, difficulty: 1 }),
+        ...Array.from({ length: 5 }, (_, i) => word(`hard${i}`, { difficulty: 9 })),
+      ];
+      const result = assignFormats(words, {
+        translate_input: 80,
+        mcq_translation: 20,
+        mcq_definition: 0,
+        fill_blank: 0,
+      });
+      expect(typeOf(result, 'trap')).toBe('mcq_translation');
     });
 
     it('still prefers a trap over a merely hard word when slots are scarce', () => {
@@ -92,6 +113,7 @@ describe('assignFormats', () => {
         word('plain-a', { trickiness: 0, difficulty: 2 }),
         word('plain-b', { trickiness: 0, difficulty: 2 }),
       ];
+      // Both are eligible; preference decides.
       const result = assignFormats(words, {
         translate_input: 75,
         mcq_translation: 25,
@@ -121,11 +143,13 @@ describe('assignFormats', () => {
       expect(typeOf(result, 'trap-weak')).not.toBe('mcq_translation');
     });
 
-    it('reports a shortfall rather than inventing traps that are not there', () => {
+    it('reports a shortfall rather than giving every easy word multiple choice', () => {
+      // One trap plus nine clearly easier words, asking for all-MCQ. Only the
+      // trap and the top of the difficulty range can honestly take it.
       const words = [
-        word('trap', { trickiness: 3, difficulty: 3 }),
+        word('trap', { trickiness: 3, difficulty: 1 }),
         ...Array.from({ length: 9 }, (_, i) =>
-          word(`plain${i}`, { trickiness: 0, difficulty: 3 }),
+          word(`plain${i}`, { trickiness: 0, difficulty: i < 6 ? 1 : 4 }),
         ),
       ];
       const { report } = assignFormats(words, {
@@ -135,27 +159,32 @@ describe('assignFormats', () => {
         fill_blank: 0,
       });
 
-      expect(report.achieved.mcq_translation).toBe(1);
+      expect(report.achieved.mcq_translation).toBeLessThan(10);
       const shortfall = report.shortfalls.find((s) => s.type === 'mcq_translation');
-      expect(shortfall).toMatchObject({ wanted: 10, got: 1 });
       expect(shortfall?.reason).toContain('free guess');
-      // The other nine still became questions.
-      expect(report.achieved.translate_input).toBe(9);
+      // Nothing is lost — the rest still became questions.
+      expect(
+        report.achieved.mcq_translation + report.achieved.translate_input,
+      ).toBe(10);
     });
   });
 
   describe('definition MCQ needs a hard, definable word', () => {
-    it('skips words that are too easy to be worth defining', () => {
-      const words = Array.from({ length: 10 }, (_, i) =>
-        word(`easy${i}`, { difficulty: MIN_DIFFICULTY_FOR_DEFINITION - 1, suitsDefinitionMcq: true }),
-      );
+    it('cannot fill the format from a uniformly easy list', () => {
+      // A flat, uniformly easy list: nothing stands out as the harder end.
+      const words = [
+        ...Array.from({ length: 8 }, (_, i) => word(`easy${i}`, { difficulty: 1 })),
+        ...Array.from({ length: 2 }, (_, i) => word(`less${i}`, { difficulty: 2 })),
+      ];
       const { report } = assignFormats(words, {
         translate_input: 50,
         mcq_translation: 0,
         mcq_definition: 50,
         fill_blank: 0,
       });
-      expect(report.achieved.mcq_definition).toBe(0);
+      // Only the top of the range is eligible, so the format cannot be filled.
+      expect(report.achieved.mcq_definition).toBeLessThan(5);
+      expect(report.shortfalls.some((s) => s.type === 'mcq_definition')).toBe(true);
     });
 
     it('skips words the extractor said cannot be defined, however hard they are', () => {

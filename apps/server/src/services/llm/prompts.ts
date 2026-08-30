@@ -84,8 +84,16 @@ make the question free marks, which defeats the point. In order of preference:
   2. A near-synonym with a different nuance.
   3. A word from the same topic that would fit the sentence but not the meaning.
 
-Every wrong answer must be a real ${targetLanguage} word or phrase, must be plausible, and must NOT
-mean the same as the correct answer. Do not repeat the correct answer. Do not repeat yourself.
+THE ONE RULE THAT MATTERS: exactly one option may be correct. Before you answer, check each wrong
+option by asking "could a teacher mark this right?" — if yes, replace it.
+
+This is the most common way these questions go wrong. For "kaum → scarcely", the options "barely",
+"rarely" and "hardly ever" are all ALSO correct translations of "kaum", so that question has four
+right answers and is broken. Near-synonyms of the correct answer are never acceptable as wrong
+answers, however tempting they look.
+
+Every wrong answer must be a real ${targetLanguage} word or phrase, and must be plausible. Do not
+repeat the correct answer. Do not repeat yourself.
 
 WORDS:
 ${list}

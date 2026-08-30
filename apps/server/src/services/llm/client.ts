@@ -37,9 +37,21 @@ export interface ChatRequest<T> {
   signal?: AbortSignal;
 }
 
+/**
+ * Reasoning models can genuinely take minutes on a long word list, so this is
+ * generous — but it must exist. Without it a provider that never answers leaves
+ * a job stuck in "running" for ever, which is what it looks like to a teacher
+ * standing in front of a class.
+ */
+const REQUEST_TIMEOUT_MS = 180_000;
+
 interface ChatChoice {
   message?: { content?: string | null };
+  finish_reason?: string;
 }
+
+/** An empty reply — worth one retry, unlike a refused request. */
+class EmptyReply extends Error {}
 
 async function callOnce(
   config: LlmConfig,
@@ -58,10 +70,16 @@ async function callOnce(
         'x-title': 'voku',
       },
       body: JSON.stringify(body),
-      signal: signal ?? null,
+      signal: signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (err) {
-    throw new LlmError(`Could not reach the language model at ${config.baseUrl}`, String(err));
+    const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+    throw new LlmError(
+      timedOut
+        ? `${config.model} did not answer within ${REQUEST_TIMEOUT_MS / 1000} seconds. Reasoning models are often too slow for this — try a faster one.`
+        : `Could not reach the language model at ${config.baseUrl}`,
+      String(err),
+    );
   }
 
   const text = await response.text();
@@ -79,8 +97,20 @@ async function callOnce(
     throw new LlmError('The language model sent something that was not JSON.', text.slice(0, 600));
   }
 
-  const content = parsed.choices?.[0]?.message?.content;
-  if (!content) throw new LlmError('The language model returned an empty response.', text.slice(0, 600));
+  const choice = parsed.choices?.[0];
+  const content = choice?.message?.content;
+
+  if (!content) {
+    // Some models intermittently return a null message, and some spend the whole
+    // token budget on reasoning and never get to the answer. Both are worth one
+    // more try, so this is an EmptyReply rather than a hard failure.
+    const reason = choice?.finish_reason;
+    throw new EmptyReply(
+      reason === 'length'
+        ? `${config.model} used its entire token budget before answering — its reasoning does not leave room for the reply.`
+        : `${config.model} returned an empty reply.`,
+    );
+  }
   return content;
 }
 
@@ -134,7 +164,17 @@ export async function chatJson<T>(config: LlmConfig, request: ChatRequest<T>): P
       max_tokens: request.maxTokens ?? 4000,
     };
 
-    const raw = await callOnce(config, body, request.signal);
+    let raw: string;
+    try {
+      raw = await callOnce(config, body, request.signal);
+    } catch (err) {
+      if (err instanceof EmptyReply) {
+        lastError = err.message;
+        continue;
+      }
+      throw err;
+    }
+
     try {
       return request.schema.parse(JSON.parse(extractJson(raw)));
     } catch (err) {
@@ -145,7 +185,10 @@ export async function chatJson<T>(config: LlmConfig, request: ChatRequest<T>): P
     }
   }
 
-  throw new LlmError('The language model could not produce the expected format.', lastError);
+  throw new LlmError(
+    `${model} could not produce the expected format. Some models cannot follow a JSON schema reliably — try a different one.`,
+    lastError,
+  );
 }
 
 /** Cheap round-trip used by the "Test connection" button on the settings page. */

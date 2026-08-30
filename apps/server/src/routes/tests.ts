@@ -36,7 +36,7 @@ import {
 } from '../services/tests.js';
 import { acceptVariant, rejectedAnswers, repeatCandidates } from '../services/regrade.js';
 import { testStats } from '../services/stats.js';
-import { createJob, startJob } from '../services/jobs.js';
+import { activeJob, createJob, startJob } from '../services/jobs.js';
 import { getLlmConfig, isLlmConfigured } from '../services/settings.js';
 import { extractWords, generateWithLlm, regenerateOne, transcribeImages } from '../services/llm/compose.js';
 import { TranscribeSchema } from '../services/llm/schemas.js';
@@ -428,6 +428,15 @@ testsRouter.post(
 // The AI composer. Every route here has a manual equivalent elsewhere, so a
 // missing API key costs convenience, not the ability to run a test.
 // ---------------------------------------------------------------------------
+
+/** Whatever AI work is still running for this test, so the UI can rejoin it. */
+testsRouter.get(
+  '/:id/active-job',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    res.json({ job: activeJob(req.db, test.id) });
+  }),
+);
 
 /** Reads text off a photographed textbook page or a PDF, into the paste box. */
 testsRouter.post(

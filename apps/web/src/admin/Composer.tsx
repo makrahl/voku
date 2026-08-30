@@ -13,6 +13,7 @@ import {
   type WordView,
 } from '@voku/shared';
 import { ApiError, admin, api, waitForJob } from '../lib/api.ts';
+import type { JobView } from '@voku/shared';
 import {
   Button,
   EditableHeading,
@@ -70,6 +71,31 @@ export function Composer() {
       refresh();
     },
     onError: (error: ApiError) => setBanner(error.message),
+  });
+
+  /**
+   * AI work runs on the server, so the browser is free to walk away. Polling it
+   * here rather than inside a step means switching steps, reloading, or coming
+   * back to a backgrounded tab all rejoin the job instead of losing it.
+   */
+  const job = useQuery({
+    queryKey: ['admin', 'active-job', testId],
+    queryFn: () => api.get<{ job: JobView | null }>(admin(`/tests/${testId}/active-job`)),
+    refetchInterval: (q) => {
+      const j = q.state.data?.job;
+      return j && j.status !== 'error' ? 1500 : false;
+    },
+  });
+
+  const latest = job.data?.job ?? null;
+  const running = latest && latest.status !== 'error' ? latest : null;
+  const failed = latest && latest.status === 'error' ? latest : null;
+
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    // The moment it finishes, pull in whatever it produced.
+    if (wasRunning.current && !running) refresh();
+    wasRunning.current = Boolean(running);
   });
 
   const lifecycle = useMutation({
@@ -139,6 +165,18 @@ export function Composer() {
 
       {banner ? <ErrorText>{banner}</ErrorText> : null}
 
+      {running ? <JobBanner job={running} /> : null}
+      {failed ? (
+        <div className="rule-t rule-b flex flex-col gap-2 py-5">
+          <span className="label">The AI step did not finish</span>
+          <p className="max-w-prose text-ink">{failed.error}</p>
+          <p className="text-sm text-ink-40">
+            Nothing was lost — try again, pick a different model in Settings, or build the test by
+            hand.
+          </p>
+        </div>
+      ) : null}
+
       {step === 0 ? <TextStep test={test.data} aiReady={aiReady} onDone={refresh} /> : null}
       {step === 1 ? <WordsStep test={test.data} aiReady={aiReady} onDone={refresh} /> : null}
       {step === 2 ? <DesignStep test={test.data} onDone={refresh} /> : null}
@@ -163,6 +201,54 @@ export function Composer() {
           Next
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A running job, shown wherever you are in the composer. Some models take
+ * minutes, so this states the elapsed time rather than pretending to know how
+ * long is left.
+ */
+function JobBanner({ job }: { job: JobView }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [job.id]);
+
+  const label =
+    job.kind === 'extract'
+      ? 'Reading the text for words worth training'
+      : job.kind === 'generate'
+        ? 'Writing the questions'
+        : 'Reading the page';
+
+  const pct = job.total > 0 ? Math.round((job.progress / job.total) * 100) : null;
+
+  return (
+    <div className="rule-t rule-b flex flex-col gap-3 py-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <span className="text-ink">
+          {label}
+          {pct !== null ? ` — ${job.progress} of ${job.total}` : '…'}
+        </span>
+        <span className="tabular text-sm text-ink-40">
+          {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')} elapsed
+        </span>
+      </div>
+
+      <div className="relative h-px w-full bg-hairline">
+        <div
+          className={cx('absolute inset-y-0 left-0 bg-accent', pct === null && 'animate-pulse')}
+          style={{ width: pct === null ? '100%' : `${pct}%` }}
+        />
+      </div>
+
+      <p className="text-sm text-ink-40">
+        This runs on the server — you can move around, or close the tab and come back.
+        {elapsed > 60 ? ' Slower models can take several minutes.' : ''}
+      </p>
     </div>
   );
 }
@@ -321,13 +407,12 @@ function WordsStep({
 
   const extract = async () => {
     setError(null);
-    setBusy('Reading the text…');
+    setBusy('Starting…');
     try {
-      const { jobId } = await api.post<{ jobId: string }>(admin(`/tests/${test.id}/extract-words`), {
-        level: 'B1',
-      });
-      await waitForJob(jobId);
-      invalidate();
+      await api.post<{ jobId: string }>(admin(`/tests/${test.id}/extract-words`), { level: 'B1' });
+      // The banner at the top of the composer takes it from here, so this step
+      // does not have to stay mounted for the work to finish.
+      onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -683,20 +768,15 @@ function QuestionsStep({
 
   const generate = async (withAi: boolean) => {
     setError(null);
-    setBusy(withAi ? 'Writing the questions…' : 'Building the questions…');
+    setBusy(withAi ? 'Starting…' : 'Building the questions…');
     try {
       if (withAi) {
-        const { jobId } = await api.post<{ jobId: string }>(
-          admin(`/tests/${test.id}/generate-questions`),
-          {},
-        );
-        await waitForJob(jobId, (progress, total) =>
-          setBusy(total ? `Writing the questions… ${progress}/${total}` : 'Writing the questions…'),
-        );
+        await api.post<{ jobId: string }>(admin(`/tests/${test.id}/generate-questions`), {});
+        onDone(); // the composer's banner follows it from here
       } else {
         await api.post(admin(`/tests/${test.id}/generate`));
+        invalidate();
       }
-      invalidate();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

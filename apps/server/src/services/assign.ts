@@ -32,23 +32,46 @@ export interface AssignableWord {
 
 /** Below this, the distractors would be arbitrary rather than tempting. */
 export const MIN_TRICKINESS_FOR_MCQ = 2;
-/**
- * A word can also earn multiple choice by being genuinely hard, not only by
- * being a trap. Guessing is only a free ride when the word was easy anyway; on
- * a word at this level the student either knows it or is choosing between four
- * plausible things they half-recognise, which is a real question.
- */
-export const MIN_DIFFICULTY_FOR_MCQ = 7;
-/** An English definition is only worth asking for when the word is a stretch. */
-export const MIN_DIFFICULTY_FOR_DEFINITION = 7;
 
-const ELIGIBLE: Record<QuestionType, (w: AssignableWord) => boolean> = {
-  mcq_translation: (w) =>
-    w.trickiness >= MIN_TRICKINESS_FOR_MCQ || w.difficulty >= MIN_DIFFICULTY_FOR_MCQ,
-  mcq_definition: (w) => w.suitsDefinitionMcq && w.difficulty >= MIN_DIFFICULTY_FOR_DEFINITION,
-  fill_blank: (w) => w.suitsFillBlank,
-  translate_input: () => true,
-};
+/**
+ * "Hard" is judged against the rest of the test, not against a fixed number.
+ *
+ * Difficulty is a language model's opinion, and models calibrate differently:
+ * one calls the hardest word in a text a 9, another calls the same word a 6.
+ * A hardcoded threshold silently empties both multiple-choice formats whenever
+ * the model happens to be conservative, which looks like a bug in the mix.
+ *
+ * A word is treated as hard if it sits in the top 40% of *this* test. Every
+ * word on the list was already chosen as worth training, so the top of that
+ * selection is hard in the only sense that matters here.
+ */
+export const HARD_PERCENTILE = 0.6;
+
+/**
+ * Below this nothing is hard, whatever the rest of the list looks like. The
+ * percentile alone collapses on a flat list — if every word scores 2, the top
+ * 40% also scores 2, and suddenly trivial words qualify for multiple choice.
+ */
+export const ABSOLUTE_EASY_CEILING = 4;
+
+function hardnessCutoff(words: AssignableWord[]): number {
+  if (words.length === 0) return ABSOLUTE_EASY_CEILING;
+  const sorted = words.map((w) => w.difficulty).sort((a, b) => a - b);
+  const percentile = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * HARD_PERCENTILE))]!;
+  return Math.max(ABSOLUTE_EASY_CEILING, percentile);
+}
+
+function eligibility(words: AssignableWord[]): Record<QuestionType, (w: AssignableWord) => boolean> {
+  const hard = hardnessCutoff(words);
+  return {
+    // A trap, or one of the harder words here. Never an easy one, where four
+    // options would just be a free 25%.
+    mcq_translation: (w) => w.trickiness >= MIN_TRICKINESS_FOR_MCQ || w.difficulty >= hard,
+    mcq_definition: (w) => w.suitsDefinitionMcq && w.difficulty >= hard,
+    fill_blank: (w) => w.suitsFillBlank,
+    translate_input: () => true,
+  };
+}
 
 /** Best-fit first, so the scarce format gets the words it suits most. */
 const PREFERENCE: Record<QuestionType, (a: AssignableWord, b: AssignableWord) => number> = {
@@ -60,9 +83,9 @@ const PREFERENCE: Record<QuestionType, (a: AssignableWord, b: AssignableWord) =>
 
 const SHORTFALL_REASON: Record<QuestionType, string> = {
   mcq_translation:
-    'multiple choice only goes to words that are traps or genuinely hard — on an easy word it would be a free guess',
+    'multiple choice only goes to traps and to the harder words in this test — on an easy one it would be a free guess',
   mcq_definition:
-    'only some words are both hard enough and concrete enough to define in English',
+    'only the harder words that can be defined in plain English are worth this format',
   fill_blank: 'only some words sit naturally in a gap sentence',
   translate_input: 'every word can be typed, so this should never fall short',
 };
@@ -126,6 +149,7 @@ export function assignFormats(words: AssignableWord[], weights: MixWeights): Ass
 
   const wanted = desiredCounts(weights, words.length);
   const unassigned = new Map(words.map((w) => [w.id, w]));
+  const ELIGIBLE = eligibility(words);
 
   for (const type of ORDER) {
     const want = wanted[type];
