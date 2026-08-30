@@ -180,9 +180,13 @@ export function Composer() {
       ) : null}
 
       {step === 0 ? <TextStep test={test.data} aiReady={aiReady} onDone={refresh} /> : null}
-      {step === 1 ? <WordsStep test={test.data} aiReady={aiReady} onDone={refresh} /> : null}
+      {step === 1 ? (
+        <WordsStep test={test.data} aiReady={aiReady} onDone={refresh} job={running} />
+      ) : null}
       {step === 2 ? <DesignStep test={test.data} onDone={refresh} /> : null}
-      {step === 3 ? <QuestionsStep test={test.data} aiReady={aiReady} onDone={refresh} /> : null}
+      {step === 3 ? (
+        <QuestionsStep test={test.data} aiReady={aiReady} onDone={refresh} job={running} />
+      ) : null}
       {step === 4 ? (
         <OpenStep
           test={test.data}
@@ -204,6 +208,25 @@ export function Composer() {
         </Button>
       </div>
     </div>
+  );
+}
+
+/** The same job, stated next to the button that started it. */
+function JobInline({ job }: { job: JobView }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [job.id]);
+
+  return (
+    <span className="flex items-center gap-3 text-sm text-ink-60">
+      <span className="size-3 animate-spin rounded-full border border-hairline-strong border-t-accent" />
+      {job.total > 0 ? `${job.progress} of ${job.total}` : 'Working'} ·{' '}
+      <span className="tabular">
+        {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}
+      </span>
+    </span>
   );
 }
 
@@ -356,10 +379,12 @@ function WordsStep({
   test,
   aiReady,
   onDone,
+  job,
 }: {
   test: TestView;
   aiReady: boolean;
   onDone: () => void;
+  job: JobView | null;
 }) {
   const queryClient = useQueryClient();
   const [paste, setPaste] = useState('');
@@ -423,12 +448,12 @@ function WordsStep({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-3">
         {aiReady ? (
-          <Button variant="primary" onClick={extract} disabled={Boolean(busy)}>
+          <Button variant="primary" onClick={extract} disabled={Boolean(busy) || Boolean(job)}>
             Find the words in the text
           </Button>
         ) : null}
         <Button onClick={() => setShowRepeats((v) => !v)}>Words from an earlier test</Button>
-        {busy ? <Spinner label={busy} /> : null}
+        {job ? <JobInline job={job} /> : busy ? <Spinner label={busy} /> : null}
       </div>
       <ErrorText>{error}</ErrorText>
 
@@ -735,10 +760,12 @@ function QuestionsStep({
   test,
   aiReady,
   onDone,
+  job,
 }: {
   test: TestView;
   aiReady: boolean;
   onDone: () => void;
+  job: JobView | null;
 }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
@@ -795,14 +822,18 @@ function QuestionsStep({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-3">
         {aiReady ? (
-          <Button variant="primary" onClick={() => generate(true)} disabled={Boolean(busy)}>
+          <Button
+            variant="primary"
+            onClick={() => generate(true)}
+            disabled={Boolean(busy) || Boolean(job)}
+          >
             Write the questions
           </Button>
         ) : null}
-        <Button onClick={() => generate(false)} disabled={Boolean(busy)}>
+        <Button onClick={() => generate(false)} disabled={Boolean(busy) || Boolean(job)}>
           {aiReady ? 'Build without the AI' : 'Build the questions'}
         </Button>
-        {busy ? <Spinner label={busy} /> : null}
+        {job ? <JobInline job={job} /> : busy ? <Spinner label={busy} /> : null}
       </div>
       <ErrorText>{error}</ErrorText>
 
