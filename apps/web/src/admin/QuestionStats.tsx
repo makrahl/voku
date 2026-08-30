@@ -31,7 +31,7 @@ const TYPE_SHORT: Record<QuestionType, string> = {
   fill_blank: 'gap',
 };
 
-/** A bar of how many got it right. Empty reads as trouble without needing a second colour. */
+/** Empty bar reads as trouble without needing a second colour. */
 function Rate({ rate }: { rate: number | null }) {
   if (rate === null) return <span className="w-28 text-right text-sm text-ink-25">not reached</span>;
   return (
@@ -44,14 +44,7 @@ function Rate({ rate }: { rate: number | null }) {
   );
 }
 
-/**
- * What the class did not know.
- *
- * The rest of the board answers "how did each student do". This answers the
- * question that changes the next lesson, so it defaults to worst-first rather
- * than test order — the point is to surface the words to reteach, not to
- * reproduce the test.
- */
+/** Defaults to worst-first: the point is the words to reteach, not the test order. */
 export function QuestionStats({ testId }: { testId: string }) {
   const [order, setOrder] = useState<'trouble' | 'test'>('trouble');
 
@@ -77,7 +70,7 @@ export function QuestionStats({ testId }: { testId: string }) {
     order === 'test'
       ? [...questions].sort((a, b) => a.orderIndex - b.orderIndex)
       : [...questions].sort((a, b) => {
-          // Unreached words are unknown, not bad — they sort last, not first.
+          // Unreached is unknown, not bad — sorts last.
           if (a.correctRate === null) return 1;
           if (b.correctRate === null) return -1;
           return a.correctRate - b.correctRate || b.reachedCount - a.reachedCount;

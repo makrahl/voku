@@ -1,16 +1,9 @@
 import { LlmError, type LlmConfig } from './client.js';
 
 /**
- * The provider's model catalogue.
- *
- * `GET /models` is part of the OpenAI-compatible dialect, so this works against
- * OpenRouter, OpenAI itself and a local server alike. Everything beyond `id` is
- * optional and provider-specific — a bare list of ids still works, it is just
- * less informative.
- *
- * Proxied rather than fetched from the browser for three reasons: the key never
- * leaves the server, there is no CORS to negotiate, and OpenRouter's catalogue
- * is around 400 kB of JSON that we can cut to the few fields a chooser needs.
+ * The provider's catalogue. `GET /models` is part of the OpenAI-compatible
+ * dialect; everything beyond `id` is optional. Proxied so the key stays on the
+ * server, there is no CORS, and 400 kB becomes the fields a chooser needs.
  */
 
 export interface ModelChoice {
@@ -55,9 +48,7 @@ export async function listModels(config: LlmConfig): Promise<ModelChoice[]> {
   try {
     response = await fetch(`${config.baseUrl.replace(/\/+$/, '')}/models`, {
       headers: {
-        // Some providers list publicly, some require the key. Send it when we
-        // have one, but do not insist — the catalogue is often browsable before
-        // a key has been saved, which is exactly when it is most useful.
+        // Sent when available, not required: many providers list publicly.
         ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
         accept: 'application/json',
       },

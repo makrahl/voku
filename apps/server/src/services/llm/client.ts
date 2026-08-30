@@ -37,12 +37,7 @@ export interface ChatRequest<T> {
   signal?: AbortSignal;
 }
 
-/**
- * Reasoning models can genuinely take minutes on a long word list, so this is
- * generous — but it must exist. Without it a provider that never answers leaves
- * a job stuck in "running" for ever, which is what it looks like to a teacher
- * standing in front of a class.
- */
+/** Generous, because reasoning models are slow — but a hung provider must not wedge a job. */
 const REQUEST_TIMEOUT_MS = 180_000;
 
 interface ChatChoice {
@@ -101,9 +96,7 @@ async function callOnce(
   const content = choice?.message?.content;
 
   if (!content) {
-    // Some models intermittently return a null message, and some spend the whole
-    // token budget on reasoning and never get to the answer. Both are worth one
-    // more try, so this is an EmptyReply rather than a hard failure.
+    // Retryable: some models return null, some burn the budget on reasoning.
     const reason = choice?.finish_reason;
     throw new EmptyReply(
       reason === 'length'

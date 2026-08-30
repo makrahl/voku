@@ -11,15 +11,9 @@ export interface Choice {
 }
 
 /**
- * Type-to-filter picker over a long list.
- *
- * A combobox rather than a select, deliberately: the field must still accept a
- * model the provider has not listed — one too new to appear, or a local server
- * that does not publish a catalogue. Whatever is typed is the value, and the
- * list is help rather than a constraint.
- *
- * Every space-separated term must match somewhere, so "claude sonnet" finds
- * "anthropic/claude-sonnet-4.5" without needing the punctuation.
+ * Type-to-filter picker. A combobox, not a select: whatever you type is the
+ * value, so an unlisted model still works. Every space-separated term must
+ * match, so "claude sonnet" finds "anthropic/claude-sonnet-4.5".
  */
 export function Combobox({
   value,
@@ -50,8 +44,6 @@ export function Combobox({
     const onPointer = (event: PointerEvent) => {
       if (!wrapper.current?.contains(event.target as Node)) {
         setOpen(false);
-        // Typing and clicking away keeps what was typed: it may be a model the
-        // provider never listed.
         onChange(query.trim());
       }
     };
@@ -67,7 +59,6 @@ export function Combobox({
       .map((choice) => {
         const haystack = `${choice.id} ${choice.name}`.toLowerCase();
         if (!terms.every((term) => haystack.includes(term))) return null;
-        // An id that starts with what you typed is almost certainly the one.
         const exact = choice.id.toLowerCase() === query.toLowerCase() ? 0 : 1;
         const prefix = choice.id.toLowerCase().startsWith(terms[0]!) ? 0 : 1;
         return { choice, rank: exact * 4 + prefix * 2 + choice.id.length / 1000 };
@@ -80,7 +71,6 @@ export function Combobox({
 
   useEffect(() => setActive(0), [query]);
 
-  // Keep the highlighted row in view while arrowing through a long list.
   useEffect(() => {
     if (!open) return;
     listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({

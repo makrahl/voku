@@ -2,16 +2,10 @@ import type { QuestionType } from '@voku/shared';
 import type { Db } from '../db/index.js';
 
 /**
- * What the class actually knows.
- *
- * The results board answers "how did each student do". This answers the
- * question a teacher asks next, which is the one that changes Monday's lesson:
- * *which words do I need to teach again?*
- *
- * The correct rate counts only students who **reached** the question. In a
- * sprint most of the class never sees the last few words, and counting those as
- * wrong would make every hard word look like a disaster and bury the words that
- * genuinely went badly.
+ * Which words the class did not know — the question a teacher asks after "who
+ * scored what". Rates count only students who reached the question: in a sprint
+ * most never see the last few, and counting those as wrong buries the real
+ * problems.
  */
 
 export interface QuestionStat {
@@ -65,8 +59,7 @@ export function testStats(db: Db, testId: string): TestStats {
             COALESCE(SUM(a.is_correct), 0) AS correct
        FROM questions q
        JOIN test_words w ON w.id = q.word_id
-       -- Graded answers only, and filtered *before* the join: putting the mode
-       -- on a LEFT JOIN would keep the practice rows and count them as reach.
+       -- Filtered before the join; on a LEFT JOIN the practice rows survive.
        LEFT JOIN (
               SELECT a.question_id, a.is_correct, a.id
                 FROM answers a
@@ -79,8 +72,7 @@ export function testStats(db: Db, testId: string): TestStats {
     { test: testId },
   );
 
-  // Wrong answers per question, so a bad word comes with evidence of *how* it
-  // was misunderstood rather than just a number.
+  // Evidence of how a word was misunderstood, not just that it was.
   const wrong = db.all<{ question_id: string; given: string; n: number }>(
     `SELECT a.question_id, a.given_text AS given, COUNT(*) AS n
        FROM answers a

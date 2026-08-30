@@ -34,24 +34,11 @@ export interface AssignableWord {
 export const MIN_TRICKINESS_FOR_MCQ = 2;
 
 /**
- * "Hard" is judged against the rest of the test, not against a fixed number.
- *
- * Difficulty is a language model's opinion, and models calibrate differently:
- * one calls the hardest word in a text a 9, another calls the same word a 6.
- * A hardcoded threshold silently empties both multiple-choice formats whenever
- * the model happens to be conservative, which looks like a bug in the mix.
- *
- * A word is treated as hard if it sits in the top 40% of *this* test. Every
- * word on the list was already chosen as worth training, so the top of that
- * selection is hard in the only sense that matters here.
+ * "Hard" means the top 40% of *this* test, not a fixed score: models calibrate
+ * differently, and a fixed cutoff silently empties both MCQ formats when one
+ * scores conservatively. The floor stops a uniformly trivial list qualifying.
  */
 export const HARD_PERCENTILE = 0.6;
-
-/**
- * Below this nothing is hard, whatever the rest of the list looks like. The
- * percentile alone collapses on a flat list — if every word scores 2, the top
- * 40% also scores 2, and suddenly trivial words qualify for multiple choice.
- */
 export const ABSOLUTE_EASY_CEILING = 4;
 
 function hardnessCutoff(words: AssignableWord[]): number {
@@ -64,8 +51,7 @@ function hardnessCutoff(words: AssignableWord[]): number {
 function eligibility(words: AssignableWord[]): Record<QuestionType, (w: AssignableWord) => boolean> {
   const hard = hardnessCutoff(words);
   return {
-    // A trap, or one of the harder words here. Never an easy one, where four
-    // options would just be a free 25%.
+    // A trap, or one of the harder words here — never an easy free 25%.
     mcq_translation: (w) => w.trickiness >= MIN_TRICKINESS_FOR_MCQ || w.difficulty >= hard,
     mcq_definition: (w) => w.suitsDefinitionMcq && w.difficulty >= hard,
     fill_blank: (w) => w.suitsFillBlank,
