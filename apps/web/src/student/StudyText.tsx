@@ -72,6 +72,12 @@ export function StudyText({
           }
 
           const active = open === index || hovered === index;
+          // "attempted" in the text, "attempt" on the list — the base form is
+          // worth showing, because it is the one they have to learn.
+          const inflected =
+            segment.headwordEn !== undefined &&
+            segment.text.toLowerCase() !== segment.headwordEn.toLowerCase();
+
           return (
             <span key={index} className="relative inline-block">
               <button
@@ -80,25 +86,30 @@ export function StudyText({
                 onClick={() => setOpen(open === index ? null : index)}
                 onMouseEnter={() => setHovered(index)}
                 onMouseLeave={() => setHovered(null)}
-                className={cx(
-                  'border-b-2 transition-colors',
-                  marks,
-                  active ? 'border-accent text-accent' : 'border-hairline-strong',
-                )}
+                className={cx('text-accent transition-colors', marks, active && 'bg-accent-quiet')}
               >
                 {segment.text}
               </button>
 
               {showAll ? (
                 <span className="ml-1 align-baseline text-base text-ink-40">
-                  ({segment.translationDe})
+                  ({inflected ? `${segment.headwordEn} · ` : ''}
+                  {segment.translationDe})
                 </span>
               ) : active ? (
                 <span
                   role="tooltip"
-                  className="absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap border border-hairline-strong bg-paper px-3 py-1.5 text-base leading-normal text-ink"
+                  className="absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap border border-hairline-strong bg-paper px-3 py-1.5 text-base leading-normal"
                 >
-                  {segment.translationDe}
+                  {inflected ? (
+                    <>
+                      {/* The dictionary form, which the text may not show. */}
+                      <span className="text-ink-40">{segment.headwordEn} · </span>
+                      <span className="text-ink">{segment.translationDe}</span>
+                    </>
+                  ) : (
+                    <span className="text-ink">{segment.translationDe}</span>
+                  )}
                 </span>
               ) : null}
             </span>

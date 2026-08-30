@@ -247,7 +247,7 @@ function StudyList() {
           {hasText ? (
             <section className="flex flex-col gap-5">
               <p className="text-ink-40">
-                Tap any underlined word to see what it means.
+                Tap a coloured word to see what it means.
               </p>
               <StudyText blocks={data!.blocks} showAll={showAll} />
             </section>
