@@ -261,13 +261,13 @@ export function Button({ variant = 'secondary', size = 'md', className, ...rest 
     lg: 'min-h-14 px-10 text-lg',
   }[size];
   const variants = {
-    // Solid terracotta with off-white text — the brief's primary action. When
-    // disabled it drops the fill entirely rather than fading to a washed-out
-    // pink, which reads as a broken box rather than an inactive control.
-    primary:
-      'bg-accent text-paper hover:opacity-90 disabled:bg-transparent disabled:text-ink-25 disabled:border disabled:border-hairline',
-    secondary: 'border border-hairline-strong text-ink hover:border-ink disabled:text-ink-25',
-    quiet: 'text-ink-60 hover:text-ink disabled:text-ink-25',
+    // Disabled keeps the button's shape and swaps the fill for a neutral one:
+    // an empty outline read as a broken box, and a faded terracotta as a
+    // rendering fault. Text stays at 4.6:1 on the muted fill.
+    primary: 'bg-accent text-paper hover:opacity-90 disabled:bg-inert disabled:text-ink-40',
+    secondary:
+      'border border-hairline-strong text-ink hover:border-ink disabled:border-transparent disabled:bg-inert disabled:text-ink-40',
+    quiet: 'text-ink-60 hover:text-ink disabled:text-ink-40',
     danger: 'border border-hairline-strong text-ink-60 hover:border-ink hover:text-ink',
   }[variant];
   return <button className={cx(base, sizes, variants, className)} {...rest} />;

@@ -25,6 +25,8 @@
   /* Placeholders and disabled controls only — never content. */
   --color-ink-25: rgba(22, 22, 19, 0.32);
   --color-hairline: rgba(22, 22, 19, 0.14);
+  /* An inactive control: still a button, visibly switched off. */
+  --color-inert: rgba(22, 22, 19, 0.1);
   --color-hairline-strong: rgba(22, 22, 19, 0.28);
   --color-accent: #c65d3b;
   --color-accent-quiet: rgba(198, 93, 59, 0.12);

@@ -580,6 +580,9 @@ function Review() {
     }
   };
 
+  const missed = data.questions.filter((q) => q.reached && q.correct === false);
+  const notReached = data.questions.filter((q) => !q.reached);
+
   return (
     <Screen>
       <header className="rule-b flex items-baseline justify-between pb-5">
@@ -590,30 +593,53 @@ function Review() {
       </header>
 
       <div className="flex flex-col gap-10 py-10">
+        <p className="max-w-prose text-xl">
+          {missed.length === 0
+            ? 'Everything you reached was right.'
+            : `${missed.length} to learn.`}
+          {notReached.length > 0 ? (
+            <span className="text-ink-40">
+              {' '}
+              You did not get to {notReached.length} of them.
+            </span>
+          ) : null}
+        </p>
+
         <Rows>
-          {data.questions.map((row) => (
-            <Row key={row.id}>
-              <span className="tabular w-8 text-sm text-ink-40">
-                {String(row.orderIndex + 1).padStart(2, '0')}
-              </span>
-              <span className={cx('flex-1 text-lg', !row.reached && 'text-ink-40')}>
-                {promptOf(row.payload)}
-              </span>
-              {row.reached && row.correct === false ? (
-                <span className="text-lg text-ink-40 line-through">{row.given}</span>
-              ) : null}
-              <span
-                className={cx(
-                  'w-44 text-right text-lg',
-                  // Terracotta means "this is the right answer", consistently.
-                  row.correct === true ? 'text-accent' : 'text-ink',
-                  !row.reached && 'text-ink-40',
-                )}
-              >
-                {row.correctAnswer}
-              </span>
-            </Row>
-          ))}
+          {data.questions.map((row) => {
+            const wrong = row.reached && row.correct === false;
+            return (
+              <Row key={row.id}>
+                <span className="tabular w-8 shrink-0 text-sm text-ink-40">
+                  {String(row.orderIndex + 1).padStart(2, '0')}
+                </span>
+
+                {/* A miss is the thing worth looking at, so it is the only row
+                    set at full strength. What you already knew recedes. */}
+                <span
+                  className={cx(
+                    'min-w-40 flex-1 text-lg',
+                    wrong ? 'text-ink' : row.reached ? 'text-ink-60' : 'text-ink-40',
+                  )}
+                >
+                  {promptOf(row.payload)}
+                </span>
+
+                {wrong ? (
+                  <span className="text-lg text-ink-40 line-through">{row.given}</span>
+                ) : null}
+
+                <span
+                  className={cx(
+                    'w-44 shrink-0 text-right text-lg',
+                    wrong ? 'font-semibold text-ink' : row.reached ? 'text-ink-60' : 'text-ink-40',
+                  )}
+                >
+                  {row.correctAnswer}
+                </span>
+              </Row>
+            );
+          })}
         </Rows>
 
         <div className="flex justify-center">
