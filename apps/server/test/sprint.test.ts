@@ -314,7 +314,9 @@ describe('handing in and reviewing', () => {
 
     const me = (await server.get('/api/s/me')).body;
     expect(me.pastAttempts[0]).toMatchObject({ correctCount: 3, targetCount: 5, percent: 60 });
-    expect(me.openTests[0].submitted).toBe(true);
+    // It moves out of "ready" — there is nothing left to do with it, and it is
+    // listed under what they have finished, with the score.
+    expect(me.openTests).toHaveLength(0);
   });
 });
 

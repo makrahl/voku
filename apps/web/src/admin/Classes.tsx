@@ -174,12 +174,15 @@ export function ClassDetail() {
               if (title.trim()) newTest.mutate();
             }}
           >
-            <Input
-              value={title}
-              placeholder="Unit 3"
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-44"
-            />
+            {/* Width on the wrapper, not the input: the input's own w-full
+                would otherwise win the conflict and push the button down. */}
+            <div className="w-44">
+              <Input
+                value={title}
+                placeholder="Unit 3"
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </div>
             <Button type="submit" variant="primary" disabled={!title.trim()}>
               New test
             </Button>

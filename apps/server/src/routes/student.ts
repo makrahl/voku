@@ -98,7 +98,10 @@ studentRouter.get(
           attemptId: settled?.id ?? null,
           submitted: Boolean(settled?.submitted_at),
         };
-      });
+      })
+      // Once handed in there is nothing to do, and it is already listed under
+      // what they have finished, with the score.
+      .filter((test) => !test.submitted);
 
     // Study lists are visible before a test opens and again once it has closed,
     // but never while it is open — that would just be the answers on screen.
