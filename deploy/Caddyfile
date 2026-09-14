@@ -1,8 +1,10 @@
-# Caddy terminates TLS and forwards everything to the Node process.
+# Caddy terminates TLS and forwards to the container's published loopback port.
 # Certificates are automatic, which is what makes the QR codes work: iOS will
 # not open an http:// link from a scanned code in some configurations.
+#
+# Append to /etc/caddy/Caddyfile, then: sudo systemctl reload caddy
 
-voku.your-school.de {
+voku.example.de {
 	encode zstd gzip
-	reverse_proxy localhost:3000
+	reverse_proxy localhost:3200
 }

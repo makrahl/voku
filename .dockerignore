@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/dist
+# A stale tsbuildinfo makes `tsc -b` think the build is already done and
+# emit nothing, leaving the runtime stage with no dist to copy.
+**/*.tsbuildinfo
+apps/server/public
+apps/server/data
+backups
+.git
+.env
+*.db
+*.db-wal
+*.db-shm

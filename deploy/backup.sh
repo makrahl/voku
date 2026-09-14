@@ -2,11 +2,16 @@
 # Nightly backup. SQLite must be copied with .backup rather than cp — a plain
 # copy of a live WAL database can be torn.
 #
-#   0 2 * * *  /srv/voku/deploy/backup.sh
+# The database lives on the host via the compose bind mount, so this needs
+# neither root nor a running container. Needs the sqlite3 CLI (apt install
+# sqlite3).
+#
+#   0 2 * * *  $HOME/apps/voku/deploy/backup.sh
 set -euo pipefail
 
-DB="${DATABASE_PATH:-/srv/voku/apps/server/data/voku.db}"
-DEST="${VOKU_BACKUP_DIR:-/srv/voku/backups}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DB="${DATABASE_PATH:-$HERE/data/voku.db}"
+DEST="${VOKU_BACKUP_DIR:-$HERE/backups}"
 KEEP_DAYS="${VOKU_BACKUP_KEEP_DAYS:-30}"
 
 mkdir -p "$DEST"

@@ -6,3 +6,7 @@ apps/server/public/
 .env
 .env.local
 .DS_Store
+
+# Docker bind mounts
+/data/
+/backups/

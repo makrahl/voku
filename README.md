@@ -146,21 +146,31 @@ was trading against.
 
 ## Deploying
 
-Runs as one Node process behind a reverse proxy. `deploy/` has a systemd unit, a
-Caddyfile and a backup script; copy `.env.example` to `.env` and edit.
+One container behind a reverse proxy. Copy `.env.example` to `.env`, edit it,
+then:
 
 ```bash
-sudo cp deploy/voku.service /etc/systemd/system/
-sudo systemctl enable --now voku
+docker compose up -d --build
+docker compose logs app        # the setup code is printed here on first boot
 ```
+
+The image is `node:22-slim` and builds both the web bundle and the server, so
+the host needs nothing but Docker. The database lives on the host in `./data`
+via a bind mount, which is what makes backup and restore possible without
+touching the container.
+
+The container publishes to `127.0.0.1:3200` only, so the reverse proxy is the
+sole way in. `deploy/Caddyfile` has the matching block.
 
 **HTTPS is not optional in practice.** `PUBLIC_BASE_URL` builds the QR login
 links and decides whether cookies are marked `Secure`, and iOS will not always
 open a plain `http://` link from a scanned code. Set it correctly *before*
 printing the login cards.
 
-Back up with `deploy/backup.sh` on a nightly cron. It uses `sqlite3 .backup`
-rather than `cp`, because copying a live WAL database can produce a torn file.
+Back up with `deploy/backup.sh` on a nightly cron (needs `sqlite3` on the host).
+It uses `sqlite3 .backup` rather than `cp`, because copying a live WAL database
+can produce a torn file — and a restore means stopping the container and
+removing the `-wal` and `-shm` files, not just replacing the `.db`.
 
 ### Environment
 
@@ -168,7 +178,7 @@ rather than `cp`, because copying a live WAL database can produce a torn file.
 |---|---|
 | `PUBLIC_BASE_URL` | Origin for QR links; also decides the `Secure` cookie flag |
 | `PORT` | Default 3000 |
-| `DATABASE_PATH` | SQLite file, relative to `apps/server/` |
+| `DATABASE_PATH` | SQLite file. `/data/voku.db` in the container; relative paths resolve against `apps/server/` |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Optional. Seeds the Settings page |
 | `LLM_VISION_MODEL` | Optional. Only for photographing a page |
 

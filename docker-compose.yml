@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Loopback only: Caddy is the sole way in, so TLS is never bypassed.
+    ports:
+      - "127.0.0.1:3200:3000"
+    # The SQLite file lives on the host, so backups and restores do not need
+    # the container to be running.
+    volumes:
+      - ./data:/data
