@@ -14,7 +14,7 @@
     "build": "npm run build --workspace=@voku/web && npm run build --workspace=@voku/server",
     "start": "npm run start --workspace=@voku/server",
     "test": "vitest run",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b apps/server apps/web",
     "seed-admin": "npm run seed-admin --workspace=@voku/server"
   },
   "devDependencies": {
