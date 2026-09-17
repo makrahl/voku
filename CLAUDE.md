@@ -4,6 +4,31 @@ Read `README.md` first for what the app is. This file is for the things that
 are not derivable from the code — decisions that were argued out, and the
 reasoning behind them, so they do not get quietly undone.
 
+## Your machine is staging
+
+There is no staging server. The app running on this machine *is* it, and pushing
+to `main` deploys to the live site by itself — so a push is a decision, not a
+save.
+
+That splits the checking in two, and both halves are needed:
+
+- **"Does this look right?"** Only eyes answer that, on the actual screen, in a
+  browser. This project has a history of bugs that survived careful reasoning
+  about the UI and died the moment someone opened it — a heading that scrolled
+  instead of wrapping, progress shown off screen, text below the contrast floor.
+  Offer to run the app and say which screen to look at; do not report a visual
+  change as done on the strength of the diff.
+- **"Did I break something I wasn't looking at?"** `npm test` answers that. Run
+  it before pushing rather than leaving it to CI, which runs it again and blocks
+  the deploy on failure — the point is to know in ten seconds.
+
+A failed deploy rolls itself back and the database is backed up before every one,
+so the cost of being wrong is an unshipped change, not a broken lesson.
+
+Setup, fetching a copy of the live data, and the rollback procedure are in
+`Working on voku.md`. Deployment mechanics are `deploy/deploy.sh` and
+`.github/workflows/deploy.yml`.
+
 ## The one idea everything hangs off
 
 The score is `correct ÷ target` and it is **uncapped**. Reaching the target is

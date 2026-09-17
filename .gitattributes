@@ -1,0 +1,7 @@
+# The server runs these as shell scripts, and a Windows checkout would otherwise
+# commit them back with CRLF endings — which bash rejects with an error naming a
+# line that looks perfectly fine ("\r: command not found"). Normalise on commit.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
