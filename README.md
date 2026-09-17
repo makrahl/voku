@@ -38,7 +38,8 @@ finding the URL is not the same as being able to claim it.
   └─────────────────────────────────────────────┘
 ```
 
-For development, two processes:
+For development, two processes — and on Windows they must be started separately
+rather than through the root `npm run dev`, which joins them with `&`:
 
 ```bash
 npm run dev --workspace=@voku/server   # API on :3000, rebuilt on change
@@ -145,6 +146,15 @@ was trading against.
 ---
 
 ## Deploying
+
+**Changes ship by pushing to `main`.** GitHub Actions runs the typecheck and the
+273 tests, and deploys only if they pass; `deploy/deploy.sh` then backs up the
+database, builds, health-checks the running app, and puts the previous commit
+back if it does not come up. `Working on voku.md` describes that loop from the
+other end, including how to roll back.
+
+The rest of this section is how the server was set up in the first place. It is
+what you need when the machine is the problem rather than the code.
 
 One container behind a reverse proxy. Copy `.env.example` to `.env`, edit it,
 then:

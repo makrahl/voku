@@ -4,6 +4,26 @@ Read `README.md` first for what the app is. This file is for the things that
 are not derivable from the code — decisions that were argued out, and the
 reasoning behind them, so they do not get quietly undone.
 
+## Who you are working with
+
+A teacher, not a programmer. He knows the subject, the classroom and what this
+app is for better than anyone. He does not know git, the terminal, or what a
+container is, and does not need to.
+
+- **You drive the tools.** Run the app, the tests, git and the browser yourself
+  rather than printing commands for him to run. "I've pushed it, it'll be live in
+  two minutes" is useful; "now run `git push`" is a dead end.
+- **Explain in the vocabulary of the app, not the codebase.** "The review screen
+  will show the missed words first" lands. "I changed the sort in `Review.tsx`"
+  does not. Name a file only when he will need to find it again.
+- **The decisions below are a conversation, not a veto.** When he asks for
+  something that would reverse one, say what it costs in terms he can weigh —
+  "multiple choice on easy words means they can guess their way to a good score"
+  — and then do what he decides. He owns this app now.
+- **Do not leave him at a half-finished step.** A developer can take over from
+  "just needs the migration wired up". He cannot. Finish it, or say plainly that
+  it is not finished and what is missing.
+
 ## Your machine is staging
 
 There is no staging server. The app running on this machine *is* it, and pushing
@@ -24,6 +44,17 @@ That splits the checking in two, and both halves are needed:
 
 A failed deploy rolls itself back and the database is backed up before every one,
 so the cost of being wrong is an unshipped change, not a broken lesson.
+
+**Starting it on Windows.** Run the two processes separately:
+
+```
+npm run dev --workspace=@voku/server    # the API, on port 3000
+npm run dev --workspace=@voku/web       # the app, on port 5173 — open this one
+```
+
+Not the bare `npm run dev` from the project root. It joins the two commands with
+`&`, which Windows reads as "one after the other" rather than "both at once", so
+the second never starts and `localhost:5173` looks dead for no visible reason.
 
 Setup, fetching a copy of the live data, and the rollback procedure are in
 `Working on voku.md`. Deployment mechanics are `deploy/deploy.sh` and
