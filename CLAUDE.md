@@ -88,7 +88,6 @@ by two colours.
   API and inspecting the compiled CSS. Layout judgements are inference, and
   several real bugs have come from that — a heading that scrolled instead of
   wrapping, progress shown off screen, text below the contrast floor.
-- `Help` is a stub with section headings and an honest "not written yet".
 - Fill-in-the-blank needs a context sentence, and there is no UI field for one,
   so that format is effectively AI-only.
 - No export. "Can I get these into my markbook?" has no answer yet.
