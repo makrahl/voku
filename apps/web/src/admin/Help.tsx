@@ -215,10 +215,12 @@ const TOPICS: Topic[] = [
           worth reading.
         </p>
         <p>
-          From there they can run the same test again as <b>practice</b>. Practice attempts are
-          never graded, never appear on your board and never affect the class statistics. It is
-          there so a student who scored 40% can go again on the bus home without it counting against
-          them.
+          From there they get two things, and they are different on purpose.{' '}
+          <b>Practise the words</b> is the same word drill as before the test — that is the one
+          worth doing, because the words carry into the next unit and these questions do not.{' '}
+          <b>Try the questions again</b> re-runs this test, untimed. Neither is graded, neither
+          appears on your board, and neither touches the class statistics. A student who scored 40%
+          can go again on the bus home without it counting against them.
         </p>
         <p>
           During the sprint, a near-miss is marked wrong but flagged <b>Almost</b>, so a student who

@@ -171,6 +171,47 @@ describe('practising the word list before the test', () => {
   });
 });
 
+describe('what the review screen may offer', () => {
+  /** Sits the test and hands in, leaving the test open for the rest of the class. */
+  async function submitEarly(): Promise<string> {
+    await publish();
+    await server.post(`/api/admin/tests/${testId}/open`);
+
+    return asStudent(async () => {
+      const started = (await server.post(`/api/s/tests/${testId}/start`)).body;
+      await server.post(`/api/s/attempts/${started.attempt.id}/submit`);
+      return started.attempt.id as string;
+    });
+  }
+
+  // The word list is the answer to half the questions, so an early finisher
+  // must not be handed it while the others are still writing.
+  it('withholds the word drill from someone who handed in while the test runs', async () => {
+    const attemptId = await submitEarly();
+
+    const review = await asStudent(
+      async () => (await server.get(`/api/s/attempts/${attemptId}/review`)).body,
+    );
+    expect(review.canPractiseWords).toBe(false);
+
+    const refused = await asStudent(async () => server.get(`/api/s/tests/${testId}/drill`));
+    expect(refused.status).toBe(403);
+  });
+
+  it('offers it once the test is closed', async () => {
+    const attemptId = await submitEarly();
+    await server.post(`/api/admin/tests/${testId}/close`);
+
+    const review = await asStudent(
+      async () => (await server.get(`/api/s/attempts/${attemptId}/review`)).body,
+    );
+    expect(review.canPractiseWords).toBe(true);
+
+    const allowed = await asStudent(async () => server.get(`/api/s/tests/${testId}/drill`));
+    expect(allowed.status).toBe(200);
+  });
+});
+
 describe('the teacher previewing that practice', () => {
   // The preview exists to answer "what will they get?" before deciding to
   // publish, so it must work on a draft — unlike the students' own drill.

@@ -310,6 +310,9 @@ studentRouter.get(
 
     res.json({
       attempt: attemptView(req.db, attempt, test.title),
+      // An early finisher must not be offered the word list while the rest of
+      // the class is still writing — it is the answers to half the questions.
+      canPractiseWords: test.status !== 'open',
       questions: rows.map((row) => {
         const payload = QuestionPayloadSchema.parse(JSON.parse(row.payload_json));
         return {

@@ -316,7 +316,7 @@ function StudentDrill() {
       <Drill
         path={student(`/tests/${testId}/drill`)}
         queryKey={['student', 'drill', testId]}
-        heading={<span className="label">Practice</span>}
+        heading={<span className="label">Practice · words</span>}
         action={
           <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
             Close
@@ -496,7 +496,8 @@ function Sprint({ mode }: { mode: 'graded' | 'practice' }) {
             {attempt.deadlineAt ? (
               <Countdown deadlineAt={attempt.deadlineAt} onExpire={expire} />
             ) : (
-              <span className="label">Practice</span>
+              // Named, because the word drill is also practice and also untimed.
+              <span className="label">Practice · questions</span>
             )}
             <span className="tabular text-sm font-semibold text-ink-40">
               {question ? `${question.index} / ${question.total}` : ''}
@@ -585,7 +586,7 @@ function Review() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['student', 'review', attemptId],
     queryFn: () =>
-      api.get<{ attempt: AttemptView; questions: ReviewRow[] }>(
+      api.get<{ attempt: AttemptView; questions: ReviewRow[]; canPractiseWords: boolean }>(
         student(`/attempts/${attemptId}/review`),
       ),
   });
@@ -682,13 +683,30 @@ function Review() {
           })}
         </Rows>
 
-        <div className="flex justify-center">
-          <Button
-            variant="primary"
-            onClick={() => navigate(`/s/tests/${data.attempt.testId}/practice`)}
-          >
-            Practise these words
-          </Button>
+        {/* Two different things, so they say which is which. The words come
+            first: they carry into the next test, where these questions do not. */}
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-wrap justify-center gap-4">
+            {data.canPractiseWords ? (
+              <Button
+                variant="primary"
+                onClick={() => navigate(`/s/tests/${data.attempt.testId}/drill`)}
+              >
+                Practise the words
+              </Button>
+            ) : null}
+            <Button
+              variant={data.canPractiseWords ? 'secondary' : 'primary'}
+              onClick={() => navigate(`/s/tests/${data.attempt.testId}/practice`)}
+            >
+              Try the questions again
+            </Button>
+          </div>
+          {!data.canPractiseWords ? (
+            <p className="text-sm text-ink-40">
+              The word list comes back once everyone has finished.
+            </p>
+          ) : null}
         </div>
       </div>
     </Screen>
