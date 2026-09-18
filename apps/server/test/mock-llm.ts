@@ -109,6 +109,18 @@ function defaultReply(system: string, user: string): string {
     });
   }
 
+  // Before the definition branch: that one matches on "definitions", which the
+  // glossary prompt also talks about.
+  if (system.includes('glossary entries')) {
+    return JSON.stringify({
+      items: headwordsIn(user).map((headword) => ({
+        headword,
+        definition: 'a short plain explanation of the idea in question',
+        example: `Everyone noticed how ${headword} the whole afternoon turned out to be.`,
+      })),
+    });
+  }
+
   if (system.includes('definitions')) {
     return JSON.stringify({
       items: headwordsIn(user).map((headword) => ({

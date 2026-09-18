@@ -38,7 +38,13 @@ import { acceptVariant, rejectedAnswers, repeatCandidates } from '../services/re
 import { testStats } from '../services/stats.js';
 import { activeJob, createJob, startJob } from '../services/jobs.js';
 import { getLlmConfig, isLlmConfigured } from '../services/settings.js';
-import { extractWords, generateWithLlm, regenerateOne, transcribeImages } from '../services/llm/compose.js';
+import {
+  enrichWords,
+  extractWords,
+  generateWithLlm,
+  regenerateOne,
+  transcribeImages,
+} from '../services/llm/compose.js';
 import { TranscribeSchema } from '../services/llm/schemas.js';
 import type { Db } from '../db/index.js';
 
@@ -474,6 +480,20 @@ testsRouter.post(
       report.advance();
       return result;
     });
+    res.status(202).json({ jobId });
+  }),
+);
+
+/** Fills in the definition and example the printed worksheet needs. */
+testsRouter.post(
+  '/:id/enrich-words',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    assertEditable(test);
+    requireLlm(req.db);
+
+    const jobId = createJob(req.db, 'enrich', test.id, 0);
+    startJob(req.db, jobId, (report) => enrichWords(req.db, getLlmConfig(req.db), test, report));
     res.status(202).json({ jobId });
   }),
 );
