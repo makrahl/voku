@@ -186,6 +186,55 @@ describe('taking the due words into the new test', () => {
     expect((await server.get(`/api/admin/tests/${next}/words`)).body).toEqual([]);
   });
 
+  /** Builds a test carrying one repeat and one new word, ready for the class. */
+  async function unitWithARepeat(): Promise<{ testId: string; token: string }> {
+    await pastUnit('Unit 3 — Weather', 'ambush;Hinterhalt', 40);
+    const testId = await newTest('Unit 4');
+    const list = await due(testId);
+    await server.post(`/api/admin/tests/${testId}/import-words`, { wordIds: [list[0]!.wordId] });
+    await server.post(`/api/admin/tests/${testId}/words/paste`, { text: 'weary;müde\nvivid;lebhaft' });
+    await server.patch(`/api/admin/tests/${testId}`, { targetCount: 1 });
+    await server.post(`/api/admin/tests/${testId}/generate`);
+    await server.post(`/api/admin/tests/${testId}/publish`);
+
+    const token = (
+      await server.post(`/api/admin/classes/${classId}/students`, { names: 'Lena Berger' })
+    ).body.added[0].token as string;
+    return { testId, token };
+  }
+
+  it('tells the class which words are coming back, and from where', async () => {
+    const { testId, token } = await unitWithARepeat();
+
+    server.clearCookies();
+    await server.post('/api/s/session', { token });
+    const study = (await server.get(`/api/s/tests/${testId}/words`)).body;
+    const drill = (await server.get(`/api/s/tests/${testId}/drill`)).body;
+
+    const carried = study.words.find((w: { headwordEn: string }) => w.headwordEn === 'ambush');
+    const fresh = study.words.find((w: { headwordEn: string }) => w.headwordEn === 'weary');
+    expect(carried.repeatedFrom).toBe('Unit 3 — Weather');
+    expect(fresh.repeatedFrom).toBeNull();
+
+    expect(drill.items.some((i: { repeatedFrom: string | null }) => i.repeatedFrom === 'Unit 3 — Weather')).toBe(true);
+  });
+
+  it('prints the revision column only when something is coming back', async () => {
+    const { testId } = await unitWithARepeat();
+    const withRepeat = (await server.get(`/api/admin/tests/${testId}/worksheet`)).body;
+    expect(withRepeat.columns).toContain('from');
+    expect(withRepeat.rows.find((r: { word: string }) => r.word === 'ambush').from).toBe(
+      'from Unit 3 — Weather',
+    );
+    expect(withRepeat.rows.find((r: { word: string }) => r.word === 'weary').from).toBe('');
+
+    // A sheet of nothing but new words gets no column to explain.
+    const plain = await newTest('Unit 5');
+    await server.post(`/api/admin/tests/${plain}/words/paste`, { text: 'weary;müde' });
+    const noRepeat = (await server.get(`/api/admin/tests/${plain}/worksheet`)).body;
+    expect(noRepeat.columns).not.toContain('from');
+  });
+
   it('will not import a word from another teacher’s class', async () => {
     await pastUnit('Unit 1', 'ambush;Hinterhalt', 40);
     const mine = await due(await newTest());

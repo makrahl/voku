@@ -27,6 +27,7 @@ const HEADINGS: Record<keyof WorksheetRow, string> = {
   german: 'German',
   definition: 'Definition',
   example: 'Example',
+  from: 'Revision',
 };
 
 /** Share of the page each column gets, matching the print view's proportions. */
@@ -35,6 +36,7 @@ const WIDTHS: Record<keyof WorksheetRow, number> = {
   german: 18,
   definition: 30,
   example: 34,
+  from: 14,
 };
 
 const COLUMNS: Record<WorksheetVariant, Array<keyof WorksheetRow>> = {
@@ -65,6 +67,7 @@ function rowFor(word: WordRow, variant: WorksheetVariant): WorksheetRow {
     german: word.translation_de,
     definition: word.definition_en ?? '',
     example: word.context_sentence ?? '',
+    from: word.repeated_from_title ? `from ${word.repeated_from_title}` : '',
   };
 
   if (variant === 'no_german') return { ...full, german: '' };
@@ -83,14 +86,14 @@ export function buildWorksheet(
 ): WorksheetView {
   // Easiest first, the order the sprint uses — the sheet is what they revise from.
   const words = includedWords(db, test.id);
+  const rows = words.map((word) => rowFor(word, variant));
 
-  return {
-    title: test.title,
-    className,
-    variant,
-    columns: COLUMNS[variant],
-    rows: words.map((word) => rowFor(word, variant)),
-  };
+  // The revision column only appears when something is coming back, so a sheet
+  // of all-new words is not given an empty column to explain.
+  const columns = [...COLUMNS[variant]];
+  if (rows.some((row) => row.from)) columns.push('from');
+
+  return { title: test.title, className, variant, columns, rows };
 }
 
 /**

@@ -4,6 +4,7 @@ import { buildOffline } from './build-questions.js';
 import { makeRng, seedFrom } from './rng.js';
 import { includedWords, toBuildable, type TestRow } from './tests.js';
 
+
 /**
  * Drilling the word pairs before a test.
  *
@@ -29,12 +30,23 @@ export function drillPayloads(db: Db, test: TestRow): Map<string, QuestionPayloa
 }
 
 export function drillItems(db: Db, test: TestRow): DrillItem[] {
+  const repeatedFrom = new Map(
+    includedWords(db, test.id).map((word) => [word.id, word.repeated_from_title ?? null]),
+  );
+
   return [...drillPayloads(db, test)].flatMap(([wordId, payload]) => {
     // stripAnswer is the only path from a question to a student, even for one
     // built on the fly — hand-rolling the shape is how an answer leaks.
     const safe = stripAnswer(payload);
     return safe.type === 'translate_input'
-      ? [{ wordId, prompt: safe.prompt, direction: safe.direction }]
+      ? [
+          {
+            wordId,
+            prompt: safe.prompt,
+            direction: safe.direction,
+            repeatedFrom: repeatedFrom.get(wordId) ?? null,
+          },
+        ]
       : [];
   });
 }

@@ -5,6 +5,7 @@ import {
   DEFAULT_MIX,
   QUESTION_TYPES,
   type AchievedMix,
+  type DueWord,
   type MixWeights,
   type QuestionType,
   type QuestionView,
@@ -678,9 +679,32 @@ function WordSheetFields({
   );
 }
 
+/**
+ * Words coming back from earlier units.
+ *
+ * Leads with what is due, because spacing is the point and a teacher should not
+ * have to remember which unit a word was last in. Browsing one particular unit
+ * stays underneath, for when they already know what they are after.
+ *
+ * Nothing is carried over until it is ticked. The suggestion is offered afresh
+ * for every test, so leaving it alone is always a valid answer.
+ */
 function RepeatPicker({ test, onImported }: { test: TestView; onImported: () => void }) {
   const [sourceId, setSourceId] = useState<string>('');
   const [picked, setPicked] = useState<Set<string>>(new Set());
+
+  const dueWords = useQuery({
+    queryKey: ['admin', 'due-words', test.id],
+    queryFn: () => api.get<DueWord[]>(admin(`/tests/${test.id}/due-words`)),
+  });
+
+  const toggle = (wordId: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(wordId)) next.delete(wordId);
+      else next.add(wordId);
+      return next;
+    });
 
   const sources = useQuery({
     queryKey: ['admin', 'repeat-sources', test.id],
@@ -700,20 +724,63 @@ function RepeatPicker({ test, onImported }: { test: TestView; onImported: () => 
   });
 
   const importWords = useMutation({
+    // No source test: a pick can span several units at once.
     mutationFn: () =>
-      api.post(admin(`/tests/${test.id}/import-words`), {
-        fromTestId: sourceId,
-        wordIds: [...picked],
-      }),
+      api.post(admin(`/tests/${test.id}/import-words`), { wordIds: [...picked] }),
     onSuccess: () => {
       setPicked(new Set());
+      void dueWords.refetch();
       onImported();
     },
   });
 
+  const due = dueWords.data ?? [];
+  const overdue = due.filter((word) => word.dueInDays <= 0);
+
   return (
-    <div className="rule-t rule-b flex flex-col gap-6 py-8">
-      <Field label="Take words from">
+    <div className="rule-t rule-b flex flex-col gap-8 py-8">
+      <div className="flex flex-col gap-4">
+        <span className="label">Due to come round again</span>
+        {dueWords.isLoading ? (
+          <Spinner />
+        ) : overdue.length === 0 ? (
+          <p className="text-sm text-ink-60">
+            {due.length === 0
+              ? 'Nothing yet — words appear here once a test that had them has been closed.'
+              : 'Nothing is due. The class saw these recently enough that asking again would be early.'}
+          </p>
+        ) : (
+          <>
+            <p className="max-w-prose text-sm text-ink-60">
+              Words the class met in an earlier unit, longest overdue first. Spacing them out is
+              what makes them stick — but nothing is added unless you tick it.
+            </p>
+            <ul className="max-h-80 overflow-y-auto">
+              {overdue.map((word) => (
+                <li key={word.wordId} className="rule-t flex flex-wrap items-center gap-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={picked.has(word.wordId)}
+                    onChange={() => toggle(word.wordId)}
+                    className="size-5 accent-[var(--color-accent)]"
+                    aria-label={`Bring back ${word.headwordEn}`}
+                  />
+                  <span className="min-w-28 flex-1 text-lg">{word.headwordEn}</span>
+                  <span className="min-w-28 flex-1 text-sm text-ink-60">{word.translationDe}</span>
+                  <span className="text-sm text-ink-40">
+                    {word.fromTestTitle} · {word.daysSince} days ago
+                  </span>
+                  <span className="tabular w-24 shrink-0 text-right text-sm text-ink-60">
+                    {word.correctRate === null ? 'not reached' : `${word.correctRate}% right`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+
+      <Field label="Or take words from one particular test">
         <Select value={sourceId} onChange={(e) => setSourceId((e.target as HTMLSelectElement).value)}>
           <option value="">Choose an earlier test…</option>
           {sources.data?.map((s) => (
@@ -758,15 +825,17 @@ function RepeatPicker({ test, onImported }: { test: TestView; onImported: () => 
               </li>
             ))}
           </ul>
-          <Button
-            variant="primary"
-            disabled={picked.size === 0 || importWords.isPending}
-            onClick={() => importWords.mutate()}
-          >
-            Add {picked.size} word{picked.size === 1 ? '' : 's'}
-          </Button>
         </>
       ) : null}
+
+      {/* One button for both lists, since a pick may span several units. */}
+      <Button
+        variant="primary"
+        disabled={picked.size === 0 || importWords.isPending}
+        onClick={() => importWords.mutate()}
+      >
+        Add {picked.size} word{picked.size === 1 ? '' : 's'}
+      </Button>
     </div>
   );
 }

@@ -225,6 +225,8 @@ export interface WorksheetRow {
   german: string;
   definition: string;
   example: string;
+  /** "from Unit 3" for a carried-over word, empty for a new one. */
+  from: string;
 }
 
 export interface WorksheetView {
@@ -266,6 +268,8 @@ export interface DrillItem {
   wordId: string;
   prompt: string;
   direction: QuestionDirection;
+  /** The unit this word came back from, shown as a quiet label. Null if new. */
+  repeatedFrom: string | null;
 }
 
 export interface DrillView {

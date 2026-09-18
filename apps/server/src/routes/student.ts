@@ -173,6 +173,9 @@ studentRouter.get(
       id: w.id,
       headwordEn: w.headword_en,
       translationDe: w.translation_de,
+      // Named rather than coloured: the accent already means "right answer" to
+      // a student, and a colour would not survive the worksheet's photocopier.
+      repeatedFrom: w.repeated_from_title ?? null,
     }));
     res.json({
       title: test.title,

@@ -24,6 +24,7 @@ const HEADINGS: Record<keyof WorksheetRow, string> = {
   german: 'German',
   definition: 'Definition',
   example: 'Example',
+  from: 'Revision',
 };
 
 /** Roughly how much of the width each column needs when it is printed. */
@@ -32,6 +33,7 @@ const WIDTHS: Record<keyof WorksheetRow, string> = {
   german: '18%',
   definition: '30%',
   example: '34%',
+  from: '14%',
 };
 
 /** Which columns a variant actually prints, so a missing cell is only worth
@@ -199,9 +201,14 @@ export function Worksheet({
                 <tr key={index} className="rule-b align-top">
                   {view.columns.map((column) => (
                     <td key={column} className="py-3 pr-4 leading-snug">
-                      {/* An empty cell is the exercise, so it gets a line to
-                          write on rather than collapsing to nothing. */}
-                      {row[column] || <span className="block border-b border-hairline pt-5" />}
+                      {column === 'from' ? (
+                        // Not an exercise: a blank here just means the word is new.
+                        <span className="text-sm text-ink-40">{row.from}</span>
+                      ) : (
+                        // An empty cell is the exercise, so it gets a line to
+                        // write on rather than collapsing to nothing.
+                        row[column] || <span className="block border-b border-hairline pt-5" />
+                      )}
                     </td>
                   ))}
                 </tr>

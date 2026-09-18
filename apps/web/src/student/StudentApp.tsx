@@ -225,7 +225,12 @@ function StudyList() {
     queryFn: () =>
       api.get<{
         title: string;
-        words: Array<{ id: string; headwordEn: string; translationDe: string }>;
+        words: Array<{
+          id: string;
+          headwordEn: string;
+          translationDe: string;
+          repeatedFrom: string | null;
+        }>;
         blocks: Block[];
       }>(student(`/tests/${testId}/words`)),
   });
@@ -297,6 +302,12 @@ function StudyList() {
               <Row key={word.id}>
                 <span className="flex-1 text-xl">{word.headwordEn}</span>
                 <span className="flex-1 text-xl text-ink-60">{word.translationDe}</span>
+                {/* Named, not coloured: the accent means "right answer" here.
+                    The slot is always there, empty or not, so the two columns
+                    above it stay lined up down the whole list. */}
+                <span className="label w-40 shrink-0 text-right">
+                  {word.repeatedFrom ? `from ${word.repeatedFrom}` : ''}
+                </span>
               </Row>
             ))}
           </Rows>

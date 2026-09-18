@@ -129,7 +129,13 @@ export function Drill({
         ) : feedback ? (
           <FeedbackFlash feedback={feedback} />
         ) : (
-          <QuestionCard
+          <div className="flex flex-col gap-6">
+            {/* Above the question, not beside it: it says where the word is from,
+                which is context for revising, not a hint towards the answer. */}
+            {current.repeatedFrom ? (
+              <p className="label text-center">from {current.repeatedFrom}</p>
+            ) : null}
+            <QuestionCard
             question={{
               id: current.wordId,
               index: at,
@@ -140,11 +146,12 @@ export function Drill({
                 prompt: current.prompt,
               },
             }}
-            disabled={busy}
-            chosen={null}
-            correctAnswer={null}
-            onAnswer={(given) => void answer(given)}
-          />
+              disabled={busy}
+              chosen={null}
+              correctAnswer={null}
+              onAnswer={(given) => void answer(given)}
+            />
+          </div>
         )}
       </div>
     </div>
