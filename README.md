@@ -88,6 +88,14 @@ The source text understands light markdown — `#` headings, `**bold**`,
 tapping one for its translation and dictionary form. Formatting and highlights
 compose, so a word can be bold and trained at once.
 
+When a test is being built, voku offers the words from earlier units that are
+**due to come round again** — on a widening schedule, pulled sooner when the
+class struggled with a word. Spreading repetitions out is one of the two
+best-evidenced things that make vocabulary stick. It is judged for the class
+rather than for individual students, and it only ever suggests: nothing is
+carried over unless the teacher ticks it. A word that comes back is labelled
+*from Unit 3* wherever students meet it.
+
 Once a test is published, students can **practise** from their study list: the
 word pairs, in both directions, as often as they like, with a second round of
 just the ones they missed. It drills the pairs and never the test's own

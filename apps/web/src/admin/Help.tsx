@@ -47,8 +47,8 @@ const TOPICS: Topic[] = [
           </Step>
           <Step n="02" name="Words">
             The words to be tested, with their translations. The AI can pull them out of the text,
-            or you can type and paste them yourself. <b>Words from an earlier test</b> brings back
-            vocabulary from previous units so it keeps getting revisited.
+            or you can type and paste them yourself. <b>Words from an earlier test</b> opens the
+            list of words that are <b>due to come round again</b> — see below.
           </Step>
           <Step n="03" name="Design">
             Minutes, target, direction, and the mix of question formats.
@@ -188,6 +188,38 @@ const TOPICS: Topic[] = [
           occasionally slip through as distractors — <i>kaum → scarcely</i> offered against{' '}
           <i>barely</i>, which is also correct. The Questions step is the backstop, and reading it
           before class takes a couple of minutes.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: 'Bringing words back from earlier units',
+    summary: 'What is due to be asked again, and why spacing it out is the point.',
+    body: (
+      <>
+        <p>
+          On the Words step, <b>Words from an earlier test</b> lists vocabulary the class met in a
+          unit you have already closed, longest overdue first. A word comes back roughly ten days
+          after its first outing, four weeks after the second and ten weeks after the third —
+          sooner if the class struggled with it, later if nearly all of them had it.
+        </p>
+        <p>
+          Spreading repetitions out like this is one of the two best-evidenced things anyone can do
+          for long-term retention; cramming a word three times in one week and never again is the
+          opposite. The dates are judged for the <b>class</b>, not for individual students: working
+          out what one child is personally due would mean following them across months, and this
+          app deliberately stores nothing about a student but a first name and a score.
+        </p>
+        <p>
+          <b>Nothing is carried over unless you tick it.</b> The list is offered afresh for every
+          test and ignoring it entirely is a perfectly good answer — a unit that needs all-new
+          vocabulary should have all-new vocabulary.
+        </p>
+        <p>
+          Words that come back are labelled <i>from Unit 3</i> — on the study list, in practice, and
+          in a Revision column on the printed sheet — so students know which are revision. A label
+          rather than a colour: on their screen the accent colour already means “your answer was
+          right”, and colour rarely survives a school photocopier anyway.
         </p>
       </>
     ),
