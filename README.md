@@ -116,6 +116,20 @@ The teacher's format mix is a set of **preferences, not quotas**. A text with
 three tricky words cannot support ten multiple-choice questions, and the review
 step reports the shortfall rather than inventing traps that are not there.
 
+### The worksheet
+
+Every word carries an English definition and an example sentence of its own, so
+the same list that becomes the test also prints as a sheet to revise from. Both
+fields can be written by hand; with a model connected, one button fills in
+whatever is still blank. It only fills blanks — a sentence taken from the source
+text, or anything you typed, is never written over.
+
+The sheet comes in four variants, and the variant decides what a student is
+allowed to see: everything, the German column left blank, the word missing from
+its own example, or just the pairs. That blanking happens once, when the sheet is
+built, so the printed page, the `.csv` and the `.docx` cannot disagree about it.
+Print from the browser, or download either file to finish in Excel or Word.
+
 ---
 
 ## Decisions worth knowing about
