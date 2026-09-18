@@ -222,6 +222,9 @@ testsRouter.patch(
     if (body.difficulty !== undefined) set('difficulty', 'difficulty', body.difficulty);
     if (body.trickiness !== undefined) set('trickiness', 'trickiness', body.trickiness);
     if (body.included !== undefined) set('included', 'included', body.included);
+    // Blanked out rather than left empty, so "no definition" is one state, not two.
+    if (body.definitionEn !== undefined) set('definition_en', 'definition', body.definitionEn || null);
+    if (body.contextSentence !== undefined) set('context_sentence', 'context', body.contextSentence || null);
 
     if (sets.length > 0) req.db.run(`UPDATE test_words SET ${sets.join(', ')} WHERE id = :id`, params);
     res.json(listWords(req.db, test.id).find((w) => w.id === word.id));
@@ -623,6 +626,7 @@ testsRouter.post(
           trickinessKind: row.trickiness_kind,
           trickinessNote: row.trickiness_note,
           contextSentence: row.context_sentence,
+          definitionEn: row.definition_en,
           acceptedEn: JSON.parse(row.accepted_en_json) as string[],
           acceptedDe: JSON.parse(row.accepted_de_json) as string[],
           suitsFillBlank: row.suits_fill_blank === 1,

@@ -167,6 +167,13 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_invites_email ON invites(email);
   `,
+
+  // 3 — a definition on the word itself, so a worksheet can show one for every
+  // word. Until now a definition existed only inside a mcq_definition question,
+  // which covers whichever fraction of the list happened to get that format.
+  `
+  ALTER TABLE test_words ADD COLUMN definition_en TEXT;
+  `,
 ];
 
 export function migrate(db: Db): number {

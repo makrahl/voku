@@ -124,6 +124,29 @@ describe('word list', () => {
     await server.signInAsTeacher('other@school.de', 'hunter2hunter2');
     expect((await server.get(`/api/admin/tests/${id}/words`)).status).toBe(404);
   });
+
+  // The worksheet needs a definition and an example for every word, so both must
+  // be writable by hand — a teacher with no model configured still gets a sheet.
+  it('takes a definition and an example sentence typed by the teacher', async () => {
+    const id = await withWords(3);
+    const word = (await server.get(`/api/admin/tests/${id}/words`)).body[0];
+
+    const res = await server.patch(`/api/admin/tests/${id}/words/${word.id}`, {
+      definitionEn: 'not wanting to do something',
+      contextSentence: 'She was reluctant to admit her mistake.',
+    });
+    expect(res.body.definitionEn).toBe('not wanting to do something');
+    expect(res.body.contextSentence).toBe('She was reluctant to admit her mistake.');
+  });
+
+  it('clears a definition the teacher rejects rather than storing an empty one', async () => {
+    const id = await withWords(3);
+    const word = (await server.get(`/api/admin/tests/${id}/words`)).body[0];
+
+    await server.patch(`/api/admin/tests/${id}/words/${word.id}`, { definitionEn: 'a bad one' });
+    const res = await server.patch(`/api/admin/tests/${id}/words/${word.id}`, { definitionEn: '' });
+    expect(res.body.definitionEn).toBeNull();
+  });
 });
 
 describe('generating questions without a language model', () => {

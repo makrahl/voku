@@ -49,6 +49,7 @@ export interface WordRow {
   trickiness_kind: string;
   trickiness_note: string | null;
   context_sentence: string | null;
+  definition_en: string | null;
   accepted_en_json: string;
   accepted_de_json: string;
   suits_fill_blank: number;
@@ -82,6 +83,7 @@ export function toWordView(row: WordRow): WordView {
     trickinessKind: row.trickiness_kind as WordView['trickinessKind'],
     trickinessNote: row.trickiness_note,
     contextSentence: row.context_sentence,
+    definitionEn: row.definition_en,
     acceptedEn: json<string[]>(row.accepted_en_json, []),
     acceptedDe: json<string[]>(row.accepted_de_json, []),
     suitsFillBlank: row.suits_fill_blank === 1,
@@ -203,6 +205,7 @@ export interface NewWord {
   trickinessKind?: string;
   trickinessNote?: string | null;
   contextSentence?: string | null;
+  definitionEn?: string | null;
   acceptedEn?: string[];
   acceptedDe?: string[];
   suitsFillBlank?: boolean;
@@ -223,12 +226,12 @@ export function addWords(db: Db, testId: string, words: NewWord[]): WordView[] {
       db.run(
         `INSERT INTO test_words (
            id, test_id, headword_en, translation_de, pos, difficulty, trickiness,
-           trickiness_kind, trickiness_note, context_sentence,
+           trickiness_kind, trickiness_note, context_sentence, definition_en,
            accepted_en_json, accepted_de_json, suits_fill_blank, suits_definition_mcq,
            included, origin, sort_rank)
          VALUES (
            :id, :test_id, :headword_en, :translation_de, :pos, :difficulty, :trickiness,
-           :trickiness_kind, :trickiness_note, :context_sentence,
+           :trickiness_kind, :trickiness_note, :context_sentence, :definition_en,
            :accepted_en, :accepted_de, :suits_fill_blank, :suits_definition_mcq,
            1, :origin, :sort_rank)`,
         {
@@ -242,6 +245,7 @@ export function addWords(db: Db, testId: string, words: NewWord[]): WordView[] {
           trickiness_kind: word.trickinessKind ?? 'none',
           trickiness_note: word.trickinessNote ?? null,
           context_sentence: word.contextSentence ?? null,
+          definition_en: word.definitionEn ?? null,
           accepted_en: JSON.stringify(word.acceptedEn ?? []),
           accepted_de: JSON.stringify(word.acceptedDe ?? []),
           suits_fill_blank: word.suitsFillBlank ?? true,

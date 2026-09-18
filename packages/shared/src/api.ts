@@ -79,6 +79,9 @@ export const WordUpdateSchema = z.object({
   difficulty: z.number().int().min(1).max(10).optional(),
   trickiness: z.number().int().min(0).max(3).optional(),
   included: z.boolean().optional(),
+  /** Empty string clears the field — that is how the teacher rejects a bad one. */
+  definitionEn: z.string().trim().max(400).optional(),
+  contextSentence: z.string().trim().max(400).optional(),
 });
 
 export const WordCreateSchema = z.object({
@@ -88,6 +91,7 @@ export const WordCreateSchema = z.object({
   trickiness: z.number().int().min(0).max(3).default(0),
   trickinessKind: TrickinessKindSchema.default('none'),
   contextSentence: z.string().trim().optional(),
+  definitionEn: z.string().trim().optional(),
 });
 
 /** Keep the N most difficult included words, exclude the rest. */
@@ -178,6 +182,7 @@ export interface WordView {
   trickinessKind: z.infer<typeof TrickinessKindSchema>;
   trickinessNote: string | null;
   contextSentence: string | null;
+  definitionEn: string | null;
   acceptedEn: string[];
   acceptedDe: string[];
   suitsFillBlank: boolean;
