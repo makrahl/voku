@@ -115,7 +115,8 @@ export const WorksheetRequestSchema = z.object({
 });
 
 export const ImportWordsSchema = z.object({
-  fromTestId: z.string().min(1),
+  /** Optional: the due list spans several earlier units, so words carry their own source. */
+  fromTestId: z.string().min(1).optional(),
   wordIds: z.array(z.string().min(1)).min(1),
 });
 
@@ -209,6 +210,8 @@ export interface WordView {
   suitsDefinitionMcq: boolean;
   included: boolean;
   origin: z.infer<typeof WordOriginSchema>;
+  /** Set when the word was carried over; null for a word first seen here. */
+  repeatedFrom: RepeatedFrom | null;
   rank: number;
 }
 
@@ -335,6 +338,35 @@ export interface RejectedAnswerGroup {
   variant: string;
   count: number;
   studentNames: string[];
+}
+
+/**
+ * A word from an earlier unit that is due to come round again.
+ *
+ * `dueInDays` counts down to nought and then goes negative: -12 means twelve
+ * days past due. Judged for the class, never for one student — working out what
+ * one child is individually due would mean following them for months, and this
+ * app stores a first name and a score on purpose.
+ */
+export interface DueWord {
+  wordId: string;
+  headwordEn: string;
+  translationDe: string;
+  fromTestId: string;
+  fromTestTitle: string;
+  testedAt: string;
+  daysSince: number;
+  /** How many closed tests in this class have carried the word. */
+  timesTested: number;
+  /** Correct rate among the students who reached it last time; null if nobody did. */
+  correctRate: number | null;
+  dueInDays: number;
+}
+
+/** Where a repeated word came from, for the quiet "from Unit 3" label. */
+export interface RepeatedFrom {
+  testId: string;
+  title: string;
 }
 
 export interface RepeatCandidate {

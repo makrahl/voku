@@ -174,6 +174,15 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE test_words ADD COLUMN definition_en TEXT;
   `,
+
+  // 4 — where a repeated word came from. `origin = 'repeat'` said only that a
+  // word had been round before; the class is told which unit it came back from,
+  // and that needs the test it was taken out of. Plain TEXT rather than a
+  // foreign key: if the old test is deleted the label should quietly disappear,
+  // not take the word with it.
+  `
+  ALTER TABLE test_words ADD COLUMN repeated_from TEXT;
+  `,
 ];
 
 export function migrate(db: Db): number {

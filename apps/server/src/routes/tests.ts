@@ -20,6 +20,7 @@ import {
 } from '@voku/shared';
 import { buildWorksheet, toCsv, toDocx } from '../services/worksheet.js';
 import { drillItems, drillPayloads } from '../services/drill.js';
+import { dueWords } from '../services/revision.js';
 import { gradeAnswer } from '../services/grading.js';
 import { badRequest, conflict, notFound, param, parseBody, route } from '../http.js';
 import { requireTeacher } from '../middleware/auth.js';
@@ -690,6 +691,20 @@ testsRouter.get(
   }),
 );
 
+/**
+ * Words from earlier units that are due to come round again.
+ *
+ * A suggestion and nothing more — the teacher decides per test whether to take
+ * any of them. Nothing is carried over automatically.
+ */
+testsRouter.get(
+  '/:id/due-words',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    res.json(dueWords(req.db, test.class_id, test.id));
+  }),
+);
+
 testsRouter.get(
   '/:id/repeat-candidates',
   route((req, res) => {
@@ -708,17 +723,25 @@ testsRouter.post(
     const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
     assertEditable(test);
     const { fromTestId, wordIds } = parseBody(ImportWordsSchema, req.body);
-    const source = getTestRow(req.db, req.teacher!.id, fromTestId);
 
     const placeholders = wordIds.map((_, i) => `:w${i}`).join(', ');
-    const params: Record<string, unknown> = { t: source.id };
+    const params: Record<string, unknown> = { class: test.class_id };
     wordIds.forEach((id, i) => (params[`w${i}`] = id));
 
+    // Scoped to this teacher's own class rather than to one named test: the due
+    // list draws from every earlier unit at once, so a single pick can span
+    // several of them. Without `fromTestId` the source is read off each word.
+    if (fromTestId) params.source = fromTestId;
     const rows = req.db.all<WordRow>(
-      `SELECT * FROM test_words WHERE test_id = :t AND id IN (${placeholders})`,
-      params,
+      `SELECT w.* FROM test_words w
+         JOIN tests t ON t.id = w.test_id
+        WHERE t.class_id = :class
+          AND t.id != :self
+          ${fromTestId ? 'AND t.id = :source' : ''}
+          AND w.id IN (${placeholders})`,
+      { ...params, self: test.id },
     );
-    if (rows.length === 0) throw notFound('None of those words are in that test');
+    if (rows.length === 0) throw notFound('None of those words are in an earlier test');
 
     const existing = new Set(
       req.db
@@ -748,6 +771,9 @@ testsRouter.post(
           suitsFillBlank: row.suits_fill_blank === 1,
           suitsDefinitionMcq: row.suits_definition_mcq === 1,
           origin: 'repeat',
+          // Where it came back from, so the class can be told which unit.
+          // A word repeated twice points at the unit it was last seen in.
+          repeatedFrom: row.test_id,
         })),
     );
 
