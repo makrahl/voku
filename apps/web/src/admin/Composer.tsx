@@ -71,6 +71,9 @@ export function Composer() {
     void queryClient.invalidateQueries({ queryKey: ['admin', 'test', testId] });
     void queryClient.invalidateQueries({ queryKey: ['admin', 'words', testId] });
     void queryClient.invalidateQueries({ queryKey: ['admin', 'questions', testId] });
+    // The sheet is built from the words, so it goes stale with them — and the
+    // teacher who just filled the gaps looks at the sheet, not the word list.
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'worksheet', testId] });
     // Wakes the poller: it stops when nothing is running.
     void queryClient.invalidateQueries({ queryKey: ['admin', 'active-job', testId] });
   };
@@ -107,6 +110,7 @@ export function Composer() {
     void queryClient.invalidateQueries({ queryKey: ['admin', 'test', testId] });
     void queryClient.invalidateQueries({ queryKey: ['admin', 'words', testId] });
     void queryClient.invalidateQueries({ queryKey: ['admin', 'questions', testId] });
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'worksheet', testId] });
   }, [latest, queryClient, testId]);
 
   const lifecycle = useMutation({
@@ -197,7 +201,14 @@ export function Composer() {
       {step === 3 ? (
         <QuestionsStep test={test.data} aiReady={aiReady} onDone={refresh} job={running} />
       ) : null}
-      {step === 4 ? <Worksheet testId={test.data.id} /> : null}
+      {step === 4 ? (
+        <Worksheet
+          testId={test.data.id}
+          aiReady={aiReady}
+          editable={test.data.status !== 'open'}
+          onStarted={refresh}
+        />
+      ) : null}
       {step === 5 ? (
         <PractiseStep
           test={test.data}

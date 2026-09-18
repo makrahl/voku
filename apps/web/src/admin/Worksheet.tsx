@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { WorksheetRow, WorksheetVariant, WorksheetView } from '@voku/shared';
+import type { WordView, WorksheetRow, WorksheetVariant, WorksheetView } from '@voku/shared';
 import { admin, api } from '../lib/api.ts';
 import { Button, Empty, Spinner, cx } from '../components/ui.tsx';
 
@@ -34,8 +34,60 @@ const WIDTHS: Record<keyof WorksheetRow, string> = {
   example: '34%',
 };
 
-export function Worksheet({ testId }: { testId: string }) {
+/** Which columns a variant actually prints, so a missing cell is only worth
+ *  mentioning when it would leave a hole in the sheet being looked at. */
+const NEEDS: Record<WorksheetVariant, Array<'definition' | 'example'>> = {
+  full: ['definition', 'example'],
+  no_german: ['definition', 'example'],
+  gapped: ['definition', 'example'],
+  compact: [],
+};
+
+export function Worksheet({
+  testId,
+  aiReady,
+  editable,
+  onStarted,
+}: {
+  testId: string;
+  aiReady: boolean;
+  /** An open test is locked, so the gaps cannot be filled until it closes. */
+  editable: boolean;
+  onStarted: () => void;
+}) {
   const [variant, setVariant] = useState<WorksheetVariant>('full');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const words = useQuery({
+    queryKey: ['admin', 'words', testId],
+    queryFn: () => api.get<WordView[]>(admin(`/tests/${testId}/words`)),
+  });
+
+  const included = (words.data ?? []).filter((word) => word.included);
+  const needed = NEEDS[variant];
+  const missing = {
+    definition: needed.includes('definition')
+      ? included.filter((word) => !word.definitionEn).length
+      : 0,
+    example: needed.includes('example')
+      ? included.filter((word) => !word.contextSentence).length
+      : 0,
+  };
+  const short = Math.max(missing.definition, missing.example);
+
+  const fillGaps = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      await api.post(admin(`/tests/${testId}/enrich-words`), {});
+      onStarted();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const sheet = useQuery({
     queryKey: ['admin', 'worksheet', testId, variant],
@@ -86,6 +138,36 @@ export function Worksheet({ testId }: { testId: string }) {
           ))}
         </div>
       </div>
+
+      {/* An unfilled cell prints as a writing line, exactly like one left blank
+          on purpose — so the sheet itself cannot tell the teacher which it is. */}
+      {short > 0 ? (
+        <div className="no-print rule-b flex flex-wrap items-center justify-between gap-4 pb-5">
+          <div className="flex flex-col gap-1">
+            <span className="text-ink">
+              {missing.definition > 0
+                ? `${missing.definition} of ${included.length} words have no definition yet`
+                : `${missing.example} of ${included.length} words have no example yet`}
+              {missing.definition > 0 && missing.example > 0 ? `, and ${missing.example} no example` : ''}
+              .
+            </span>
+            <span className="text-sm text-ink-40">
+              Those cells print as blank lines, which on this version of the sheet looks the same as
+              a gap left on purpose.
+            </span>
+          </div>
+          {!editable ? (
+            <span className="text-sm text-ink-40">Close the test to fill them in.</span>
+          ) : aiReady ? (
+            <Button onClick={fillGaps} disabled={busy}>
+              Write the missing ones
+            </Button>
+          ) : (
+            <span className="text-sm text-ink-40">Write them on the Words step.</span>
+          )}
+        </div>
+      ) : null}
+      {error ? <p className="no-print text-sm text-ink-60">{error}</p> : null}
 
       {empty ? (
         <Empty title="Nothing to print yet">
