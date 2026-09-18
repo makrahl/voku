@@ -19,6 +19,7 @@ import { AccountIcon, ChevronIcon, HelpIcon } from '../components/icons.tsx';
 import { Classes, ClassDetail } from './Classes.tsx';
 import { Composer } from './Composer.tsx';
 import { Board } from './Board.tsx';
+import { Worksheet } from './Worksheet.tsx';
 import { LlmSettings } from './Settings.tsx';
 import { Team } from './Team.tsx';
 import { AcceptInvite, Setup } from './Setup.tsx';
@@ -107,7 +108,8 @@ function Layout({ me, children }: { me: Me; children: React.ReactNode }) {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-8 py-8">
-      <header className="rule-b flex items-center justify-between gap-6 pb-4">
+      {/* Chrome, so it is for the screen only — a printed sheet goes to a class. */}
+      <header className="no-print rule-b flex items-center justify-between gap-6 pb-4">
         <Link to="/admin">
           <Wordmark size="sm" />
         </Link>
@@ -190,6 +192,7 @@ function SignedIn({ me }: { me: Me }) {
         <Route path="/classes/:classId" element={<ClassDetail />} />
         <Route path="/tests/:testId" element={<Composer />} />
         <Route path="/tests/:testId/board" element={<Board />} />
+        <Route path="/tests/:testId/worksheet" element={<Worksheet />} />
         <Route path="/help" element={<Help />} />
         {/* Admin-only; anyone else following an old link lands on Classes. */}
         {me.isAdmin ? (

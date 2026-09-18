@@ -389,6 +389,7 @@ function WordsStep({
   job: JobView | null;
 }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -465,6 +466,9 @@ function WordsStep({
           </Button>
         ) : null}
         <Button onClick={() => setShowRepeats((v) => !v)}>Words from an earlier test</Button>
+        {list.length > 0 ? (
+          <Button onClick={() => navigate(`/admin/tests/${test.id}/worksheet`)}>Worksheet</Button>
+        ) : null}
         {job ? <JobInline job={job} /> : busy ? <Spinner label={busy} /> : null}
       </div>
       <ErrorText>{error}</ErrorText>

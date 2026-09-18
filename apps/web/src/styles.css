@@ -115,3 +115,29 @@
 @utility rule-b {
   border-bottom: 1px solid var(--color-hairline);
 }
+
+/*
+ * Printing. Everything that is there to be clicked leaves the page, since on
+ * paper it is only ink the class cannot use. The sheet keeps its hairlines:
+ * browsers drop backgrounds by default, so a table that relied on fill would
+ * come out as unseparated rows.
+ */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  /* A row split across two pages costs the reader the line they were on. */
+  tr,
+  .avoid-break {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+}
