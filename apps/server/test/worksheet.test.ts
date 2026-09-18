@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import JSZip from 'jszip';
 import { TestServer } from './helpers.js';
-import { toCsv } from '../src/services/worksheet.js';
-import type { WorksheetView } from '@voku/shared';
+import { toCsv, toDocx } from '../src/services/worksheet.js';
+import { BLANK, type WorksheetView } from '@voku/shared';
 
 let server: TestServer;
 let classId: string;
@@ -150,5 +151,77 @@ describe('the worksheet as a table file', () => {
     const text = await csv('gapped');
     expect(text).toContain('___');
     expect(text).not.toContain('ambushed');
+  });
+});
+
+describe('the worksheet as a Word file', () => {
+  it('downloads as a document Word will open', async () => {
+    const res = await server.get(`/api/admin/tests/${testId}/worksheet.docx`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('wordprocessingml.document');
+    expect(res.headers.get('content-disposition')).toContain('Unit-3-full.docx');
+  });
+
+  // A .docx is a zip; anything else is a file that only looks like one until
+  // the teacher double-clicks it in front of a class.
+  it('really is a zip archive, not just the right file name', async () => {
+    const doc = await toDocx({
+      title: 'Unit 3',
+      className: '9b',
+      variant: 'full',
+      columns: ['word', 'german', 'definition', 'example'],
+      rows: [
+        { word: 'ambush', german: 'Hinterhalt', definition: 'a surprise attack', example: 'They hid.' },
+      ],
+    });
+    expect(doc.subarray(0, 2).toString('latin1')).toBe('PK');
+    expect(doc.length).toBeGreaterThan(1000);
+  });
+
+  /** Unpacks the archive and returns the document body as XML text. */
+  async function documentXml(doc: Buffer): Promise<string> {
+    const zip = await JSZip.loadAsync(doc);
+    return zip.file('word/document.xml')!.async('string');
+  }
+
+  it('writes the sheet into the document, umlauts and all', async () => {
+    const xml = await documentXml(
+      await toDocx({
+        title: 'Unit 3',
+        className: '9b',
+        variant: 'compact',
+        columns: ['word', 'german'],
+        rows: [{ word: 'thorough', german: 'gründlich', definition: '', example: '' }],
+      }),
+    );
+
+    expect(xml).toContain('Unit 3');
+    expect(xml).toContain('thorough');
+    expect(xml).toContain('gründlich');
+  });
+
+  // The whole point of building the sheet once: Word must not show an answer
+  // that the printed page and the table file both withhold.
+  it('withholds in Word exactly what the other formats withhold', async () => {
+    const xml = await documentXml(
+      await toDocx({
+        title: 'Unit 3',
+        className: '9b',
+        variant: 'gapped',
+        columns: ['word', 'german', 'definition', 'example'],
+        rows: [
+          {
+            word: '',
+            german: 'Hinterhalt',
+            definition: 'a surprise attack',
+            example: `The robbers ${BLANK} the travellers.`,
+          },
+        ],
+      }),
+    );
+
+    expect(xml).toContain('Hinterhalt');
+    expect(xml).toContain(BLANK);
+    expect(xml).not.toContain('ambush');
   });
 });

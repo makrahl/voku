@@ -15,7 +15,7 @@ import {
   WorksheetRequestSchema,
   type QuestionType,
 } from '@voku/shared';
-import { buildWorksheet, toCsv } from '../services/worksheet.js';
+import { buildWorksheet, toCsv, toDocx } from '../services/worksheet.js';
 import { badRequest, conflict, notFound, param, parseBody, route } from '../http.js';
 import { requireTeacher } from '../middleware/auth.js';
 import { getClass } from '../services/roster.js';
@@ -522,6 +522,22 @@ testsRouter.get(
       `attachment; filename="${worksheetFilename(view.title, view.variant, 'csv')}"`,
     );
     res.send(toCsv(view));
+  }),
+);
+
+testsRouter.get(
+  '/:id/worksheet.docx',
+  route(async (req, res) => {
+    const { view } = worksheetFor(req, param(req, 'id'));
+    res.setHeader(
+      'content-type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader(
+      'content-disposition',
+      `attachment; filename="${worksheetFilename(view.title, view.variant, 'docx')}"`,
+    );
+    res.send(await toDocx(view));
   }),
 );
 

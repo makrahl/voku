@@ -68,6 +68,7 @@ export function Worksheet() {
           </button>
           <div className="flex flex-wrap gap-3">
             <Button onClick={() => download('csv')}>Table file</Button>
+            <Button onClick={() => download('docx')}>Word file</Button>
             <Button variant="primary" onClick={() => window.print()} disabled={empty}>
               Print
             </Button>
