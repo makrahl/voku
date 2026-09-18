@@ -156,8 +156,16 @@ export function enrichUser(
 
 The sheet is studied at home, next to the German translation, so the two parts do different jobs.
 
-The definition must:
-  - be a single clause of plain English, simpler than the word being defined
+The definition is a dictionary entry, not a sentence about the word. Write the fragment that
+would follow the headword in a learner's dictionary: no "It is", no "A person", no "Something",
+no capital letter at the start and no full stop at the end.
+
+  "ambush"    -> "a surprise attack from a hidden position"
+  "thorough"  -> "done carefully, leaving nothing out"
+  "hesitate"  -> "to pause before doing something, because you are unsure"
+
+It must also:
+  - be plain English, simpler than the word being defined
   - NOT contain the word itself, or any form of it — a student covering the German column
     should still have to recall the word
   - describe only that word, not the general topic

@@ -411,17 +411,26 @@ export function Row({
   children,
   className,
   onClick,
+  detail,
 }: {
   children: ReactNode;
   className?: string;
   onClick?: () => void;
+  /** Opens under the row, inside the same hairline — for editing without a dialog. */
+  detail?: ReactNode;
 }) {
   return (
-    <li
-      className={cx('rule-b', onClick && 'cursor-pointer hover:bg-accent-quiet', className)}
-      onClick={onClick}
-    >
-      <div className="flex flex-wrap items-center gap-4 px-1 py-4">{children}</div>
+    <li className={cx('rule-b', className)}>
+      <div
+        className={cx(
+          'flex flex-wrap items-center gap-4 px-1 py-4',
+          onClick && 'cursor-pointer hover:bg-accent-quiet',
+        )}
+        onClick={onClick}
+      >
+        {children}
+      </div>
+      {detail ? <div className="px-1 pb-5">{detail}</div> : null}
     </li>
   );
 }

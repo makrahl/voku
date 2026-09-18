@@ -243,7 +243,9 @@ function JobBanner({ job }: { job: JobView }) {
       ? 'Reading the text for words worth training'
       : job.kind === 'generate'
         ? 'Writing the questions'
-        : 'Reading the page';
+        : job.kind === 'enrich'
+          ? 'Writing the definitions and examples'
+          : 'Reading the page';
 
   const pct = job.total > 0 ? Math.round((job.progress / job.total) * 100) : null;
 
@@ -391,6 +393,7 @@ function WordsStep({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRepeats, setShowRepeats] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
 
   const words = useQuery({
     queryKey: ['admin', 'words', test.id],
@@ -428,11 +431,11 @@ function WordsStep({
     onSuccess: invalidate,
   });
 
-  const extract = async () => {
+  const startJob = (path: string, body: unknown) => async () => {
     setError(null);
     setBusy('Starting…');
     try {
-      await api.post<{ jobId: string }>(admin(`/tests/${test.id}/extract-words`), { level: 'B1' });
+      await api.post<{ jobId: string }>(admin(`/tests/${test.id}/${path}`), body);
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -441,8 +444,12 @@ function WordsStep({
     }
   };
 
+  const extract = startJob('extract-words', { level: 'B1' });
+  const enrich = startJob('enrich-words', {});
+
   const list = words.data ?? [];
   const included = list.filter((w) => w.included);
+  const sheetReady = included.filter((w) => w.definitionEn && w.contextSentence).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -450,6 +457,11 @@ function WordsStep({
         {aiReady ? (
           <Button variant="primary" onClick={extract} disabled={Boolean(busy) || Boolean(job)}>
             Find the words in the text
+          </Button>
+        ) : null}
+        {aiReady && included.length > 0 ? (
+          <Button onClick={enrich} disabled={Boolean(busy) || Boolean(job)}>
+            Write the missing definitions
           </Button>
         ) : null}
         <Button onClick={() => setShowRepeats((v) => !v)}>Words from an earlier test</Button>
@@ -511,7 +523,15 @@ function WordsStep({
 
           <Rows>
             {list.map((word) => (
-              <Row key={word.id} className={cx(!word.included && 'opacity-40')}>
+              <Row
+                key={word.id}
+                className={cx(!word.included && 'opacity-40')}
+                detail={
+                  open === word.id ? (
+                    <WordSheetFields test={test} word={word} onSaved={invalidate} />
+                  ) : null
+                }
+              >
                 <input
                   type="checkbox"
                   checked={word.included}
@@ -520,8 +540,24 @@ function WordsStep({
                   aria-label={`Include ${word.headwordEn}`}
                 />
                 <span className="tabular w-6 text-sm text-ink-60">{word.difficulty}</span>
-                <span className="min-w-32 flex-1 text-lg">{word.headwordEn}</span>
+                <button
+                  type="button"
+                  onClick={() => setOpen((id) => (id === word.id ? null : word.id))}
+                  className="min-w-32 flex-1 text-left text-lg hover:underline"
+                  aria-expanded={open === word.id}
+                >
+                  {word.headwordEn}
+                </button>
                 <span className="min-w-32 flex-1 text-lg text-ink-60">{word.translationDe}</span>
+                {/* Plain text, not a colour: the accent is rationed, and this is
+                    a note about completeness rather than something to act on. */}
+                <span className="w-20 shrink-0 text-right text-xs text-ink-40">
+                  {word.definitionEn && word.contextSentence
+                    ? 'on the sheet'
+                    : word.definitionEn || word.contextSentence
+                      ? 'half done'
+                      : ''}
+                </span>
                 {word.origin === 'repeat' ? <Status tone="quiet">repeat</Status> : null}
                 {/* Settable by hand: without a model, nothing else flags a trap. */}
                 <button
@@ -550,8 +586,64 @@ function WordsStep({
             Multiple choice goes to words that are hard (7 and above) or marked as a trap —
             anywhere else it would just be a free guess. Tap “trap” to mark a false friend.
           </p>
+          <p className="text-sm text-ink-60">
+            <strong className="text-ink">{sheetReady}</strong> of {included.length} are ready for
+            the worksheet — tap a word to write its definition and example yourself.
+          </p>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * The two fields the printed sheet needs. Saved on blur rather than with a
+ * button: a teacher correcting a list of thirty is tabbing through it, and a
+ * Save next to every field would be thirty things not to forget.
+ */
+function WordSheetFields({
+  test,
+  word,
+  onSaved,
+}: {
+  test: TestView;
+  word: WordView;
+  onSaved: () => void;
+}) {
+  const [definition, setDefinition] = useState(word.definitionEn ?? '');
+  const [example, setExample] = useState(word.contextSentence ?? '');
+
+  const save = useMutation({
+    mutationFn: (body: { definitionEn?: string; contextSentence?: string }) =>
+      api.patch(admin(`/tests/${test.id}/words/${word.id}`), body),
+    onSuccess: onSaved,
+  });
+
+  return (
+    <div className="flex flex-col gap-4 pl-10">
+      <Field
+        label="Definition, in English"
+        hint="Plain English, and without using the word itself — otherwise the sheet gives the answer away."
+      >
+        <Input
+          value={definition}
+          onChange={(e) => setDefinition(e.target.value)}
+          onBlur={() =>
+            definition !== (word.definitionEn ?? '') && save.mutate({ definitionEn: definition })
+          }
+          placeholder={`what “${word.headwordEn}” means, in other words`}
+        />
+      </Field>
+      <Field label="Example sentence" hint="One sentence that uses the word, so its meaning is visible.">
+        <Input
+          value={example}
+          onChange={(e) => setExample(e.target.value)}
+          onBlur={() =>
+            example !== (word.contextSentence ?? '') && save.mutate({ contextSentence: example })
+          }
+          placeholder={`a sentence with “${word.headwordEn}” in it`}
+        />
+      </Field>
     </div>
   );
 }
