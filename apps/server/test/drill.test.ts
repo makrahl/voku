@@ -170,3 +170,43 @@ describe('practising the word list before the test', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('the teacher previewing that practice', () => {
+  // The preview exists to answer "what will they get?" before deciding to
+  // publish, so it must work on a draft — unlike the students' own drill.
+  it('works on a draft, which the students’ drill refuses', async () => {
+    const mine = (await server.get<DrillView>(`/api/admin/tests/${testId}/drill`)).body;
+    expect(mine.items).toHaveLength(6);
+
+    const theirs = await asStudent(async () => server.get(`/api/s/tests/${testId}/drill`));
+    expect(theirs.status).toBe(403);
+  });
+
+  it('asks exactly what the class will be asked', async () => {
+    await publish();
+    const mine = (await server.get<DrillView>(`/api/admin/tests/${testId}/drill`)).body;
+    const theirs = await asStudent(
+      async () => (await server.get<DrillView>(`/api/s/tests/${testId}/drill`)).body,
+    );
+    expect(mine.items).toEqual(theirs.items);
+  });
+
+  it('marks the preview without recording it', async () => {
+    const view = (await server.get<DrillView>(`/api/admin/tests/${testId}/drill`)).body;
+    const res = await server.post<DrillFeedback>(`/api/admin/tests/${testId}/drill`, {
+      wordId: view.items[0]!.wordId,
+      given: 'nonsense',
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.correct).toBe(false);
+    expect(res.body.correctAnswer).toBeTruthy();
+    expect(server.db.all('SELECT * FROM attempts')).toHaveLength(0);
+    expect(server.db.all('SELECT * FROM answers')).toHaveLength(0);
+  });
+
+  it('will not preview another teacher’s test', async () => {
+    await server.signInAsTeacher('other@school.de', 'hunter2hunter2');
+    expect((await server.get(`/api/admin/tests/${testId}/drill`)).status).toBe(404);
+  });
+});

@@ -2,6 +2,7 @@ import { Router, type Request } from 'express';
 import {
   AcceptVariantSchema,
   CutoffSchema,
+  DrillAnswerSchema,
   ExtractRequestSchema,
   ImportWordsSchema,
   RegenerateQuestionSchema,
@@ -13,9 +14,13 @@ import {
   WordPasteSchema,
   WordUpdateSchema,
   WorksheetRequestSchema,
+  type DrillFeedback,
+  type DrillView,
   type QuestionType,
 } from '@voku/shared';
 import { buildWorksheet, toCsv, toDocx } from '../services/worksheet.js';
+import { drillItems, drillPayloads } from '../services/drill.js';
+import { gradeAnswer } from '../services/grading.js';
 import { badRequest, conflict, notFound, param, parseBody, route } from '../http.js';
 import { requireTeacher } from '../middleware/auth.js';
 import { getClass } from '../services/roster.js';
@@ -483,6 +488,40 @@ testsRouter.post(
       return result;
     });
     res.status(202).json({ jobId });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Previewing the practice drill
+//
+// Deliberately without the students' `assertRevisable` guard: the point of the
+// preview is to see what a class would get *before* deciding to publish, and a
+// teacher looking at their own draft reveals nothing to anyone.
+// ---------------------------------------------------------------------------
+
+testsRouter.get(
+  '/:id/drill',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    res.json({ title: test.title, items: drillItems(req.db, test) } satisfies DrillView);
+  }),
+);
+
+testsRouter.post(
+  '/:id/drill',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    const { wordId, given } = parseBody(DrillAnswerSchema, req.body);
+
+    const payload = drillPayloads(req.db, test).get(wordId);
+    if (!payload) throw notFound('No such word in this test');
+
+    const grade = gradeAnswer(payload, given);
+    res.json({
+      correct: grade.correct,
+      almost: grade.almost,
+      correctAnswer: grade.correctAnswer,
+    } satisfies DrillFeedback);
   }),
 );
 

@@ -5,10 +5,8 @@ import {
   QuestionPayloadSchema,
   StudentSessionSchema,
   correctAnswerText,
-  stripAnswer,
   type DrillFeedback,
   type DrillView,
-  type QuestionPayload,
   type StudentHomeView,
 } from '@voku/shared';
 import { forbidden, notFound, param, parseBody, route, unauthorized } from '../http.js';
@@ -28,10 +26,9 @@ import {
   submitAttempt,
   type AttemptRow,
 } from '../services/attempts.js';
-import { includedWords, toBuildable, type TestRow } from '../services/tests.js';
-import { buildOffline } from '../services/build-questions.js';
+import { includedWords, type TestRow } from '../services/tests.js';
+import { drillItems, drillPayloads } from '../services/drill.js';
 import { gradeAnswer } from '../services/grading.js';
-import { makeRng, seedFrom } from '../services/rng.js';
 import { annotateText } from '../services/annotate.js';
 import type { Db } from '../db/index.js';
 
@@ -185,39 +182,12 @@ studentRouter.get(
   }),
 );
 
-/**
- * Drilling the word list before the test.
- *
- * The whole list is built every time and one question picked out of it, rather
- * than building the single word asked for: on a `mixed` test the direction comes
- * from the word's position, so the two would disagree and a student could be
- * asked one way and marked the other.
- */
-function drillPayloads(db: Db, test: TestRow): Map<string, QuestionPayload> {
-  const words = includedWords(db, test.id);
-  const built = buildOffline(
-    words.map(toBuildable),
-    words.map((word) => ({ wordId: word.id, type: 'translate_input' as const })),
-    { direction: test.direction, rng: makeRng(seedFrom(test.id)) },
-  );
-  return new Map(built.map((question) => [question.wordId, question.payload]));
-}
-
 studentRouter.get(
   '/tests/:id/drill',
   route((req, res) => {
     const test = testOf(req.db, param(req, 'id'), req.student!.class_id);
     assertRevisable(test);
-
-    const items = [...drillPayloads(req.db, test)].map(([wordId, payload]) => {
-      // stripAnswer is the only path from a question to a student, even for one
-      // built on the fly — hand-rolling the shape is how an answer leaks.
-      const safe = stripAnswer(payload);
-      if (safe.type !== 'translate_input') throw notFound('No such drill');
-      return { wordId, prompt: safe.prompt, direction: safe.direction };
-    });
-
-    res.json({ title: test.title, items } satisfies DrillView);
+    res.json({ title: test.title, items: drillItems(req.db, test) } satisfies DrillView);
   }),
 );
 
