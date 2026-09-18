@@ -233,7 +233,13 @@ function TypedAnswer({
  * a wrong answer is stated in plain near-black rather than a warning colour —
  * calm, not punitive, which is the tone the brief asks for.
  */
-export function FeedbackFlash({ feedback }: { feedback: AnswerFeedback }) {
+export function FeedbackFlash({
+  feedback,
+}: {
+  // Only the three fields it actually shows, so practice — which keeps no score
+  // — can use it without inventing a percentage to satisfy the type.
+  feedback: Pick<AnswerFeedback, 'correct' | 'almost' | 'correctAnswer'>;
+}) {
   return (
     <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center" role="status" aria-live="assertive">
       <span className="label">
@@ -254,12 +260,15 @@ export function FeedbackFlash({ feedback }: { feedback: AnswerFeedback }) {
   );
 }
 
-export function useFlash(durationMs = 850) {
-  const [feedback, setFeedback] = useState<AnswerFeedback | null>(null);
+/** Generic over the feedback shape, so practice — which keeps no score — fits. */
+export function useFlash<T extends Pick<AnswerFeedback, 'correct' | 'almost' | 'correctAnswer'>>(
+  durationMs = 850,
+) {
+  const [feedback, setFeedback] = useState<T | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const show = useMemo(
-    () => (next: AnswerFeedback, then: () => void) => {
+    () => (next: T, then: () => void) => {
       setFeedback(next);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => {

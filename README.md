@@ -88,6 +88,13 @@ The source text understands light markdown — `#` headings, `**bold**`,
 tapping one for its translation and dictionary form. Formatting and highlights
 compose, so a word can be bold and trained at once.
 
+Once a test is published, students can **practise** from their study list: the
+word pairs, in both directions, as often as they like, with a second round of
+just the ones they missed. It drills the pairs and never the test's own
+questions — those are identical for everyone and in a fixed order, so rehearsing
+them would measure repetition rather than knowledge. Nothing about practice is
+stored or reported.
+
 After a test, the results board shows **which words the class did not know**,
 with what students wrote instead. Rates count only students who reached the
 question, since in a sprint most never see the last few.

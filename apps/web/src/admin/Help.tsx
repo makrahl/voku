@@ -181,9 +181,21 @@ const TOPICS: Topic[] = [
   },
   {
     title: 'Practice, and what students see afterwards',
-    summary: 'Retaking a test for no marks, and reviewing the misses.',
+    summary: 'Revising beforehand, retaking afterwards, and reviewing the misses.',
     body: (
       <>
+        <p>
+          Once you publish a test, its word list appears on every student's screen with a{' '}
+          <b>Practise</b> button. That drills the word pairs — English to German and back — as often
+          as they like, and offers a second round of just the ones they missed.
+        </p>
+        <p>
+          It deliberately does <b>not</b> use the test's own questions. They would be the same
+          questions in the same order on the day, so practising them would measure how many times a
+          student clicked through rather than what they know — and a multiple-choice trap stops
+          working once the four options are familiar. Nothing about practice is recorded: you are
+          not told who revised, or how it went.
+        </p>
         <p>
           When a student hands in, they see their percentage and a review of the questions they got
           wrong, with the right answer next to what they wrote. Misses come first — that is the part
