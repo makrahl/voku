@@ -99,6 +99,20 @@ export const CutoffSchema = z.object({
   keep: z.number().int().min(1),
 });
 
+/**
+ * What the printed sheet leaves for the student to supply.
+ *
+ * `full` is the sheet to learn from; the other three each remove one thing and
+ * ask for it back. The variant decides the content, not the file format, so all
+ * of them print, download as a table, and open in Word identically.
+ */
+export const WorksheetVariantSchema = z.enum(['full', 'no_german', 'gapped', 'compact']);
+export type WorksheetVariant = z.infer<typeof WorksheetVariantSchema>;
+
+export const WorksheetRequestSchema = z.object({
+  variant: WorksheetVariantSchema.default('full'),
+});
+
 export const ImportWordsSchema = z.object({
   fromTestId: z.string().min(1),
   wordIds: z.array(z.string().min(1)).min(1),
@@ -190,6 +204,27 @@ export interface WordView {
   included: boolean;
   origin: z.infer<typeof WordOriginSchema>;
   rank: number;
+}
+
+/**
+ * One line of the printed sheet. Blanking has already happened, so every
+ * renderer — the print page, the CSV, the Word file — prints what it is given
+ * and cannot disagree with the others about what the student may see.
+ */
+export interface WorksheetRow {
+  word: string;
+  german: string;
+  definition: string;
+  example: string;
+}
+
+export interface WorksheetView {
+  title: string;
+  className: string;
+  variant: WorksheetVariant;
+  /** Columns to print, in order — a compact sheet has no definition column at all. */
+  columns: Array<keyof WorksheetRow>;
+  rows: WorksheetRow[];
 }
 
 /** Teacher-facing: includes the answer. */

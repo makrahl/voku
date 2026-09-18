@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import {
   AcceptVariantSchema,
   CutoffSchema,
@@ -12,8 +12,10 @@ import {
   WordCreateSchema,
   WordPasteSchema,
   WordUpdateSchema,
+  WorksheetRequestSchema,
   type QuestionType,
 } from '@voku/shared';
+import { buildWorksheet, toCsv } from '../services/worksheet.js';
 import { badRequest, conflict, notFound, param, parseBody, route } from '../http.js';
 import { requireTeacher } from '../middleware/auth.js';
 import { getClass } from '../services/roster.js';
@@ -481,6 +483,45 @@ testsRouter.post(
       return result;
     });
     res.status(202).json({ jobId });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// The printed worksheet
+// ---------------------------------------------------------------------------
+
+function worksheetFor(req: Request, testId: string) {
+  const test = getTestRow(req.db, req.teacher!.id, testId);
+  const { variant } = parseBody(WorksheetRequestSchema, req.query);
+  const cls = req.db.get<{ name: string }>('SELECT name FROM classes WHERE id = :id', {
+    id: test.class_id,
+  });
+  return { test, view: buildWorksheet(req.db, test, cls?.name ?? '', variant) };
+}
+
+/** A filename the teacher can find again in a folder of thirty downloads. */
+function worksheetFilename(title: string, variant: string, extension: string): string {
+  const stem = title.trim().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'worksheet';
+  return `${stem}-${variant}.${extension}`;
+}
+
+testsRouter.get(
+  '/:id/worksheet',
+  route((req, res) => {
+    res.json(worksheetFor(req, param(req, 'id')).view);
+  }),
+);
+
+testsRouter.get(
+  '/:id/worksheet.csv',
+  route((req, res) => {
+    const { view } = worksheetFor(req, param(req, 'id'));
+    res.setHeader('content-type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'content-disposition',
+      `attachment; filename="${worksheetFilename(view.title, view.variant, 'csv')}"`,
+    );
+    res.send(toCsv(view));
   }),
 );
 
