@@ -13,6 +13,8 @@ import {
   type WordView,
 } from '@voku/shared';
 import { ApiError, admin, api, waitForJob } from '../lib/api.ts';
+import { Drill } from '../components/Drill.tsx';
+import { Worksheet } from './Worksheet.tsx';
 import type { JobView } from '@voku/shared';
 import {
   Button,
@@ -39,7 +41,14 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   fill_blank: 'Fill in the blank',
 };
 
-const STEPS = ['Text', 'Words', 'Design', 'Questions', 'Open'] as const;
+/**
+ * The order follows the classroom, not the database: build the test, print the
+ * sheet, let them revise for a week, then run the five minutes. Publishing lives
+ * in Practise rather than Open, because publishing is what starts the revising —
+ * it used to sit next to "Open the test", which put a week and five minutes in
+ * the same step.
+ */
+const STEPS = ['Text', 'Words', 'Design', 'Questions', 'Worksheet', 'Practise', 'Open'] as const;
 
 export function Composer() {
   const { testId = '' } = useParams();
@@ -116,7 +125,8 @@ export function Composer() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      {/* Chrome: it belongs on the screen, never on a sheet handed to a class. */}
+      <div className="no-print flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
           <Link
             to={`/admin/classes/${test.data.classId}`}
@@ -142,7 +152,7 @@ export function Composer() {
         </div>
       </div>
 
-      <nav className="rule-b flex flex-wrap gap-8 pb-4">
+      <nav className="no-print rule-b flex flex-wrap gap-8 pb-4">
         {STEPS.map((label, index) => (
           <button
             key={label}
@@ -187,7 +197,15 @@ export function Composer() {
       {step === 3 ? (
         <QuestionsStep test={test.data} aiReady={aiReady} onDone={refresh} job={running} />
       ) : null}
-      {step === 4 ? (
+      {step === 4 ? <Worksheet testId={test.data.id} /> : null}
+      {step === 5 ? (
+        <PractiseStep
+          test={test.data}
+          onAction={(action) => lifecycle.mutate(action)}
+          pending={lifecycle.isPending}
+        />
+      ) : null}
+      {step === 6 ? (
         <OpenStep
           test={test.data}
           onAction={(action) => lifecycle.mutate(action)}
@@ -195,7 +213,7 @@ export function Composer() {
         />
       ) : null}
 
-      <div className="rule-t flex justify-between pt-6">
+      <div className="no-print rule-t flex justify-between pt-6">
         <Button disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>
           Back
         </Button>
@@ -466,9 +484,6 @@ function WordsStep({
           </Button>
         ) : null}
         <Button onClick={() => setShowRepeats((v) => !v)}>Words from an earlier test</Button>
-        {list.length > 0 ? (
-          <Button onClick={() => navigate(`/admin/tests/${test.id}/worksheet`)}>Worksheet</Button>
-        ) : null}
         {job ? <JobInline job={job} /> : busy ? <Spinner label={busy} /> : null}
       </div>
       <ErrorText>{error}</ErrorText>
@@ -1080,7 +1095,79 @@ function MixReport({ report }: { report: AchievedMix }) {
 }
 
 // ---------------------------------------------------------------------------
-// 5 — opening it
+// 6 — the week before: revising
+// ---------------------------------------------------------------------------
+
+/**
+ * Publishing, and seeing what publishing gives the class.
+ *
+ * The preview runs the same component the students do, against the same builder
+ * and the same marker — a preview that could disagree with the real thing would
+ * be worse than none, because it would be believed.
+ */
+function PractiseStep({
+  test,
+  onAction,
+  pending,
+}: {
+  test: TestView;
+  onAction: (action: 'publish' | 'unpublish' | 'open' | 'close') => void;
+  pending: boolean;
+}) {
+  const [previewing, setPreviewing] = useState(false);
+  const live = test.status === 'published' || test.status === 'closed';
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="rule-t rule-b flex flex-col gap-4 py-8">
+        <span className="label">{live ? 'Your class can revise' : 'Not shared yet'}</span>
+        <p className="max-w-prose text-lg">
+          {live
+            ? 'They see the word list and can practise it as often as they like — the pairs, not the questions from the test.'
+            : 'Publish the word list and it appears on every student’s screen, with a Practise button. Their marks are not affected either way.'}
+        </p>
+        <p className="max-w-prose text-sm text-ink-40">
+          Practising records nothing. You are not told who revised, or how it went — it is there to
+          be used without it counting.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        {test.status === 'draft' ? (
+          <Button variant="primary" onClick={() => onAction('publish')} disabled={pending}>
+            Publish the word list
+          </Button>
+        ) : null}
+        {test.status === 'published' ? (
+          <Button onClick={() => onAction('unpublish')} disabled={pending}>
+            Take it back
+          </Button>
+        ) : null}
+        <Button onClick={() => setPreviewing((v) => !v)}>
+          {previewing ? 'Hide the preview' : 'Try it as they see it'}
+        </Button>
+      </div>
+
+      {previewing ? (
+        <div className="rule-t flex min-h-[32rem] flex-col pt-6">
+          <Drill
+            path={admin(`/tests/${test.id}/drill`)}
+            queryKey={['admin', 'drill', test.id]}
+            heading={<span className="label">Preview · nothing is recorded</span>}
+            action={
+              <Button size="sm" variant="quiet" onClick={() => setPreviewing(false)}>
+                Done
+              </Button>
+            }
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 7 — opening it
 // ---------------------------------------------------------------------------
 
 function OpenStep({
@@ -1109,16 +1196,8 @@ function OpenStep({
       </div>
 
       <div className="flex flex-wrap gap-3">
-        {test.status === 'draft' ? (
-          <Button onClick={() => onAction('publish')} disabled={pending}>
-            Publish the word list
-          </Button>
-        ) : null}
-        {test.status === 'published' ? (
-          <Button onClick={() => onAction('unpublish')} disabled={pending}>
-            Unpublish
-          </Button>
-        ) : null}
+        {/* Publishing lives in Practise now: it starts the revising, which is a
+            week's worth of work, not part of the five minutes. */}
         {test.status !== 'open' ? (
           <Button variant="primary" size="lg" onClick={() => onAction('open')} disabled={pending}>
             Open the test

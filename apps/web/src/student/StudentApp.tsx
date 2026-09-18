@@ -4,9 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AnswerFeedback,
   AttemptView,
-  DrillFeedback,
-  DrillItem,
-  DrillView,
   QuestionPayload,
   StudentHomeView,
   StudentQuestionView,
@@ -14,6 +11,7 @@ import type {
 import { ApiError, api, student } from '../lib/api.ts';
 import { Button, Empty, Rows, Row, Spinner, Status, Wordmark, cx } from '../components/ui.tsx';
 import { StudyText, type Block } from './StudyText.tsx';
+import { Drill } from '../components/Drill.tsx';
 import {
   Countdown,
   FeedbackFlash,
@@ -175,6 +173,17 @@ function Home() {
                 <Row key={list.id} onClick={() => navigate(`/s/tests/${list.id}/words`)}>
                   <span className="flex-1 text-xl">{list.title}</span>
                   <span className="text-sm text-ink-40">{list.wordCount} words</span>
+                  {/* Practising is the thing they are here to do, so it is one
+                      tap from the front door rather than inside the list. */}
+                  <Button
+                    variant="primary"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      navigate(`/s/tests/${list.id}/drill`);
+                    }}
+                  >
+                    Practise
+                  </Button>
                 </Row>
               ))}
             </Rows>
@@ -297,169 +306,25 @@ function StudyList() {
   );
 }
 
-/**
- * Practising the word pairs before the test.
- *
- * Deliberately not the test's own questions — see the practice decision in
- * CLAUDE.md. Nothing here is stored or reported, so the run lives in this
- * component and is gone when the tab closes, which is what a study aid should do.
- */
-function Drill() {
+/** The class's practice screen. The drill itself is shared with the teacher's preview. */
+function StudentDrill() {
   const { testId = '' } = useParams();
   const navigate = useNavigate();
-  const [queue, setQueue] = useState<DrillItem[] | null>(null);
-  const [at, setAt] = useState(0);
-  const [missed, setMissed] = useState<DrillItem[]>([]);
-  const [right, setRight] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const { feedback, show } = useFlash<DrillFeedback>();
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['student', 'drill', testId],
-    queryFn: () => api.get<DrillView>(student(`/tests/${testId}/drill`)),
-  });
-
-  const begin = useCallback((items: DrillItem[]) => {
-    setQueue(shuffled(items));
-    setAt(0);
-    setMissed([]);
-    setRight(0);
-  }, []);
-
-  useEffect(() => {
-    if (data && queue === null) begin(data.items);
-  }, [data, queue, begin]);
-
-  if (isLoading) {
-    return (
-      <Centred>
-        <Spinner />
-      </Centred>
-    );
-  }
-  if (error || !data) {
-    return (
-      <Message eyebrow="Practice" title="Not ready yet">
-        These words are not open for practice right now. Your teacher decides when they are.
-      </Message>
-    );
-  }
-
-  const items = queue ?? [];
-  const current = items[at];
-
-  const answer = async (given: string) => {
-    if (!current || busy) return;
-    setBusy(true);
-    try {
-      const result = await api.post<DrillFeedback>(student(`/tests/${testId}/drill`), {
-        wordId: current.wordId,
-        given,
-      });
-      if (result.correct) setRight((n) => n + 1);
-      else setMissed((list) => [...list, current]);
-
-      show(result, () => {
-        setAt((n) => n + 1);
-        setBusy(false);
-      });
-    } catch {
-      setBusy(false);
-    }
-  };
-
-  // --- the round is over -----------------------------------------------------
-  if (!current) {
-    return (
-      <Screen>
-        <header className="rule-b flex items-baseline justify-between pb-5">
-          <span className="label">{data.title}</span>
-          <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
-            Close
-          </Button>
-        </header>
-
-        <Centred>
-          <span className="label">Practice</span>
-          <p className="text-display font-semibold tracking-tight">
-            {right}
-            <span className="text-ink-40">/{items.length}</span>
-          </p>
-          <p className="max-w-md text-lg text-ink-40">
-            {missed.length === 0
-              ? 'All of them. Nothing left to practise here.'
-              : `${missed.length} still to get. Practising costs nothing — go again.`}
-          </p>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-4">
-            {missed.length > 0 ? (
-              <Button variant="primary" size="lg" onClick={() => begin(missed)}>
-                The ones I missed
-              </Button>
-            ) : null}
-            <Button
-              variant={missed.length > 0 ? 'secondary' : 'primary'}
-              size="lg"
-              onClick={() => begin(data.items)}
-            >
-              All of them again
-            </Button>
-          </div>
-        </Centred>
-      </Screen>
-    );
-  }
-
-  // --- a question ------------------------------------------------------------
   return (
     <Screen>
-      <header className="rule-b flex items-baseline justify-between gap-4 pb-5">
-        <span className="label">{data.title} · practice</span>
-        <div className="flex items-center gap-6">
-          <span className="tabular text-sm text-ink-40">
-            {at + 1}/{items.length}
-          </span>
+      <Drill
+        path={student(`/tests/${testId}/drill`)}
+        queryKey={['student', 'drill', testId]}
+        heading={<span className="label">Practice</span>}
+        action={
           <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
             Close
           </Button>
-        </div>
-      </header>
-
-      {/* No progress line: its tick marks the sprint's target, and practice has
-          no target to reach. The count in the header is the whole story. */}
-      <div className="flex flex-1 flex-col justify-center py-10">
-        {feedback ? (
-          <FeedbackFlash feedback={feedback} />
-        ) : (
-          <QuestionCard
-            question={{
-              id: current.wordId,
-              index: at,
-              total: items.length,
-              payload: {
-                type: 'translate_input',
-                direction: current.direction,
-                prompt: current.prompt,
-              },
-            }}
-            disabled={busy}
-            chosen={null}
-            correctAnswer={null}
-            onAnswer={(given) => void answer(given)}
-          />
-        )}
-      </div>
+        }
+      />
     </Screen>
   );
-}
-
-/** Fisher–Yates. Practice order is shuffled; only the real sprint is fixed. */
-function shuffled<T>(items: T[]): T[] {
-  const out = [...items];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j]!, out[i]!];
-  }
-  return out;
 }
 
 /** Start screen (2a): eyebrow, wordmark, one-line summary, one primary action. */
@@ -838,7 +703,7 @@ export function StudentApp() {
       <Route path="/tests/:testId/sprint" element={<Sprint mode="graded" />} />
       <Route path="/tests/:testId/practice" element={<Sprint mode="practice" />} />
       <Route path="/tests/:testId/words" element={<StudyList />} />
-      <Route path="/tests/:testId/drill" element={<Drill />} />
+      <Route path="/tests/:testId/drill" element={<StudentDrill />} />
       <Route path="/attempts/:attemptId/score" element={<Score />} />
       <Route path="/attempts/:attemptId/review" element={<Review />} />
       <Route path="*" element={<Navigate to="/s" replace />} />

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import type { WorksheetRow, WorksheetVariant, WorksheetView } from '@voku/shared';
 import { admin, api } from '../lib/api.ts';
@@ -35,9 +34,7 @@ const WIDTHS: Record<keyof WorksheetRow, string> = {
   example: '34%',
 };
 
-export function Worksheet() {
-  const { testId = '' } = useParams();
-  const navigate = useNavigate();
+export function Worksheet({ testId }: { testId: string }) {
   const [variant, setVariant] = useState<WorksheetVariant>('full');
 
   const sheet = useQuery({
@@ -59,13 +56,7 @@ export function Worksheet() {
     <div className="flex flex-col gap-8">
       <div className="no-print flex flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <button
-            type="button"
-            onClick={() => navigate(`/admin/tests/${testId}`)}
-            className="label transition-colors hover:!text-ink"
-          >
-            ← {view.title}
-          </button>
+          <span className="label">What goes on the sheet</span>
           <div className="flex flex-wrap gap-3">
             <Button onClick={() => download('csv')}>Table file</Button>
             <Button onClick={() => download('docx')}>Word file</Button>
