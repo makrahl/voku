@@ -1,9 +1,14 @@
 import { Router } from 'express';
 import {
   AnswerSubmitSchema,
+  DrillAnswerSchema,
   QuestionPayloadSchema,
   StudentSessionSchema,
   correctAnswerText,
+  stripAnswer,
+  type DrillFeedback,
+  type DrillView,
+  type QuestionPayload,
   type StudentHomeView,
 } from '@voku/shared';
 import { forbidden, notFound, param, parseBody, route, unauthorized } from '../http.js';
@@ -23,7 +28,10 @@ import {
   submitAttempt,
   type AttemptRow,
 } from '../services/attempts.js';
-import { includedWords, type TestRow } from '../services/tests.js';
+import { includedWords, toBuildable, type TestRow } from '../services/tests.js';
+import { buildOffline } from '../services/build-questions.js';
+import { gradeAnswer } from '../services/grading.js';
+import { makeRng, seedFrom } from '../services/rng.js';
 import { annotateText } from '../services/annotate.js';
 import type { Db } from '../db/index.js';
 
@@ -147,13 +155,22 @@ studentRouter.get(
   }),
 );
 
+/**
+ * Revising is allowed once a test is published, and again once it is closed.
+ * Not in a draft, where there is nothing settled to learn, and not while the
+ * test is open — during those five minutes they should be taking it.
+ */
+function assertRevisable(test: TestRow): void {
+  if (test.status === 'open' || test.status === 'draft') {
+    throw forbidden('The word list is not available right now.');
+  }
+}
+
 studentRouter.get(
   '/tests/:id/words',
   route((req, res) => {
     const test = testOf(req.db, param(req, 'id'), req.student!.class_id);
-    if (test.status === 'open' || test.status === 'draft') {
-      throw forbidden('The word list is not available right now.');
-    }
+    assertRevisable(test);
 
     const words = includedWords(req.db, test.id).map((w) => ({
       id: w.id,
@@ -165,6 +182,67 @@ studentRouter.get(
       words,
       blocks: annotateText(test.source_text, words),
     });
+  }),
+);
+
+/**
+ * Drilling the word list before the test.
+ *
+ * The whole list is built every time and one question picked out of it, rather
+ * than building the single word asked for: on a `mixed` test the direction comes
+ * from the word's position, so the two would disagree and a student could be
+ * asked one way and marked the other.
+ */
+function drillPayloads(db: Db, test: TestRow): Map<string, QuestionPayload> {
+  const words = includedWords(db, test.id);
+  const built = buildOffline(
+    words.map(toBuildable),
+    words.map((word) => ({ wordId: word.id, type: 'translate_input' as const })),
+    { direction: test.direction, rng: makeRng(seedFrom(test.id)) },
+  );
+  return new Map(built.map((question) => [question.wordId, question.payload]));
+}
+
+studentRouter.get(
+  '/tests/:id/drill',
+  route((req, res) => {
+    const test = testOf(req.db, param(req, 'id'), req.student!.class_id);
+    assertRevisable(test);
+
+    const items = [...drillPayloads(req.db, test)].map(([wordId, payload]) => {
+      // stripAnswer is the only path from a question to a student, even for one
+      // built on the fly — hand-rolling the shape is how an answer leaks.
+      const safe = stripAnswer(payload);
+      if (safe.type !== 'translate_input') throw notFound('No such drill');
+      return { wordId, prompt: safe.prompt, direction: safe.direction };
+    });
+
+    res.json({ title: test.title, items } satisfies DrillView);
+  }),
+);
+
+/**
+ * Marks one drilled word. Nothing is written: practice is a study aid, not a
+ * measurement, and the teacher is never told who revised or how it went.
+ */
+studentRouter.post(
+  '/tests/:id/drill',
+  route((req, res) => {
+    const test = testOf(req.db, param(req, 'id'), req.student!.class_id);
+    assertRevisable(test);
+    const { wordId, given } = parseBody(DrillAnswerSchema, req.body);
+
+    const payload = drillPayloads(req.db, test).get(wordId);
+    if (!payload) throw notFound('No such word in this test');
+
+    // The same grader the real sprint uses, so practice teaches the same
+    // strictness — a spelling accepted here must be accepted there.
+    const grade = gradeAnswer(payload, given);
+    res.json({
+      correct: grade.correct,
+      almost: grade.almost,
+      correctAnswer: grade.correctAnswer,
+    } satisfies DrillFeedback);
   }),
 );
 

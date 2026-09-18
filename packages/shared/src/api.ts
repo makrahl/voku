@@ -11,6 +11,7 @@ import {
 import {
   QuestionTypeSchema,
   TestDirectionSchema,
+  type QuestionDirection,
   type QuestionPayload,
   type QuestionType,
   type StudentQuestionPayload,
@@ -137,6 +138,11 @@ export const StudentSessionSchema = z.object({
   token: z.string().min(1),
 });
 
+export const DrillAnswerSchema = z.object({
+  wordId: z.string().min(1),
+  given: z.string(),
+});
+
 export const AcceptVariantSchema = z.object({
   questionId: z.string().min(1),
   variant: z.string().min(1),
@@ -243,6 +249,32 @@ export interface StudentQuestionView {
   index: number;
   total: number;
   payload: StudentQuestionPayload;
+}
+
+/**
+ * Practising the word list before the test.
+ *
+ * Deliberately not an attempt: nothing is stored, nothing is scored, and the
+ * teacher is never told who practised. It drills the word pairs rather than the
+ * test's own questions, so revising cannot become a rehearsal of the exact
+ * items — see the practice decision in CLAUDE.md.
+ */
+export interface DrillItem {
+  wordId: string;
+  prompt: string;
+  direction: QuestionDirection;
+}
+
+export interface DrillView {
+  title: string;
+  items: DrillItem[];
+}
+
+export interface DrillFeedback {
+  correct: boolean;
+  /** Wrong by one letter — shows the right spelling without softening the mark. */
+  almost: boolean;
+  correctAnswer: string;
 }
 
 export interface AnswerFeedback {
