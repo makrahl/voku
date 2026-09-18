@@ -35,7 +35,11 @@ const TOPICS: Topic[] = [
     summary: 'From a text or a pasted word list, with or without the AI.',
     body: (
       <>
-        <p>The composer runs in five steps, and you can jump between them freely.</p>
+        <p>
+          The composer runs in seven steps, and you can jump between them freely. They follow the
+          order of the classroom rather than the order of the software: build it, hand out the
+          sheet, let them revise, then run the sprint.
+        </p>
         <dl className="flex flex-col gap-3">
           <Step n="01" name="Text">
             Paste the reading text the class is working on, or photograph a textbook page. You can
@@ -53,9 +57,17 @@ const TOPICS: Topic[] = [
             The actual questions. Read them before class — this is the step that catches a bad
             distractor or a translation you disagree with. Edit or delete anything that is wrong.
           </Step>
-          <Step n="05" name="Open">
-            Publish the word list to let students revise, then open the sprint when the lesson
-            starts.
+          <Step n="05" name="Worksheet">
+            The sheet to hand out, in four versions — to learn from, with the German left blank,
+            with the words missing from their own example sentences, or just the pairs. Print it,
+            or download it as a table or a Word file to finish in your own template.
+          </Step>
+          <Step n="06" name="Practise">
+            Publish the word list, which is what lets the class revise and practise. You can try
+            the practice yourself here first, exactly as they will see it.
+          </Step>
+          <Step n="07" name="Open">
+            Open the sprint when the lesson starts, and close it afterwards.
           </Step>
         </dl>
         <p>
@@ -111,9 +123,10 @@ const TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          <b>Publish the word list</b> a few days ahead. Students can then open it on their own
-          devices and revise, either reading the source text with the trained words highlighted, or
-          as a plain list. Tapping a word shows its translation.
+          <b>Publish the word list</b> a few days ahead, from the Practise step. Students can then
+          open it on their own devices and revise, either reading the source text with the trained
+          words highlighted, or as a plain list. Tapping a word shows its translation, and{' '}
+          <b>Practise</b> drills the pairs.
         </p>
         <p>
           <b>Open the test</b> when the lesson starts. The word list disappears while the sprint is
