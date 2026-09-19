@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AnswerFeedback,
   AttemptView,
+  MyWordsView,
   QuestionPayload,
   StudentHomeView,
   StudentQuestionView,
@@ -190,6 +191,8 @@ function Home() {
           </section>
         ) : null}
 
+        <MyWordsSection />
+
         {data.pastAttempts.length > 0 ? (
           <section className="flex flex-col gap-6">
             <span className="label">Finished</span>
@@ -210,6 +213,97 @@ function Home() {
           </section>
         ) : null}
       </div>
+    </Screen>
+  );
+}
+
+/** How many of the student's own words to show on the home screen before "and N more". */
+const MY_WORDS_SHOWN = 5;
+
+/**
+ * The student's own words to work on — theirs alone; the teacher has no view of
+ * it. Framed as work to do rather than a record of failure, and it says how the
+ * list empties, because a list that only ever grows would be a reason to stop
+ * looking at it.
+ */
+function MyWordsSection() {
+  const navigate = useNavigate();
+  // Not polled like the rest of home: it only changes when a test closes.
+  const { data } = useQuery({
+    queryKey: ['student', 'my-words'],
+    queryFn: () => api.get<MyWordsView>(student('/my-words')),
+  });
+
+  if (!data || (data.words.length === 0 && data.cleared === 0)) return null;
+  const more = data.words.length - MY_WORDS_SHOWN;
+
+  return (
+    <section className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-4">
+        <span className="label">Words to work on</span>
+        {data.words.length > 0 ? (
+          <Button variant="primary" onClick={() => navigate('/s/my-words/drill')}>
+            Practise them
+          </Button>
+        ) : null}
+      </div>
+
+      {data.words.length === 0 ? (
+        <p className="text-lg text-ink-60">
+          Nothing left here. {data.cleared} {data.cleared === 1 ? 'word' : 'words'} you once missed,
+          you have since got right in a test.
+        </p>
+      ) : (
+        <>
+          <p className="max-w-prose text-ink-60">
+            Words you missed in a test and have not got right since. A word comes off this list when
+            you get it right in a test — so practise it before the next one.
+          </p>
+          <Rows>
+            {data.words.slice(0, MY_WORDS_SHOWN).map((word) => (
+              <Row key={word.wordId}>
+                <span className="flex-1 text-xl">{word.headwordEn}</span>
+                <span className="flex-1 text-xl text-ink-60">{word.translationDe}</span>
+                {/* Always present, like the study list, so the columns stay lined up. */}
+                <span className="label w-40 shrink-0 text-right">
+                  {word.timesMissed > 1 ? `missed ${word.timesMissed}×` : `from ${word.fromTestTitle}`}
+                </span>
+              </Row>
+            ))}
+          </Rows>
+          {more > 0 || data.cleared > 0 ? (
+            <p className="text-sm text-ink-40">
+              {[
+                more > 0 ? `and ${more} more in practice` : null,
+                data.cleared > 0
+                  ? `${data.cleared} ${data.cleared === 1 ? 'word' : 'words'} already cleared`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Practising the student's own list, through the same drill as a unit's. */
+function MyWordsDrill() {
+  const navigate = useNavigate();
+  return (
+    <Screen>
+      <Drill
+        path={student('/my-words/drill')}
+        queryKey={['student', 'my-words', 'drill']}
+        heading={<span className="label">Practice · my words</span>}
+        action={
+          <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
+            Close
+          </Button>
+        }
+      />
     </Screen>
   );
 }
@@ -733,6 +827,7 @@ export function StudentApp() {
       <Route path="/tests/:testId/practice" element={<Sprint mode="practice" />} />
       <Route path="/tests/:testId/words" element={<StudyList />} />
       <Route path="/tests/:testId/drill" element={<StudentDrill />} />
+      <Route path="/my-words/drill" element={<MyWordsDrill />} />
       <Route path="/attempts/:attemptId/score" element={<Score />} />
       <Route path="/attempts/:attemptId/review" element={<Review />} />
       <Route path="*" element={<Navigate to="/s" replace />} />
