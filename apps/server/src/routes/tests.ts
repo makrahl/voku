@@ -19,7 +19,7 @@ import {
   type QuestionType,
 } from '@voku/shared';
 import { buildWorksheet, toCsv, toDocx } from '../services/worksheet.js';
-import { drillItems, drillPayloads } from '../services/drill.js';
+import { drillChoice, drillItems, drillPayloads } from '../services/drill.js';
 import { dueWords } from '../services/revision.js';
 import { gradeAnswer } from '../services/grading.js';
 import { badRequest, conflict, notFound, param, parseBody, route } from '../http.js';
@@ -505,6 +505,16 @@ testsRouter.get(
   route((req, res) => {
     const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
     res.json({ title: test.title, items: drillItems(req.db, test) } satisfies DrillView);
+  }),
+);
+
+testsRouter.get(
+  '/:id/drill/:wordId/choice',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    const choice = drillChoice(req.db, test, param(req, 'wordId'));
+    if (!choice) throw notFound('No such word in this test');
+    res.json(choice);
   }),
 );
 

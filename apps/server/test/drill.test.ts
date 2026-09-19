@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TestServer } from './helpers.js';
-import type { DrillFeedback, DrillView } from '@voku/shared';
+import type { DrillChoice, DrillFeedback, DrillView } from '@voku/shared';
 
 let server: TestServer;
 let classId: string;
@@ -166,6 +166,123 @@ describe('practising the word list before the test', () => {
     await publish();
     const res = await asStudent(async () =>
       server.post(`/api/s/tests/${testId}/drill`, { wordId: 'made-up', given: 'x' }),
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('a second go, offered as a choice', () => {
+  /** Signs in as the student, fetches the choice for one word, and marks every option. */
+  async function choiceFor(germanPrompt: string) {
+    return asStudent(async () => {
+      const view = (await server.get<DrillView>(`/api/s/tests/${testId}/drill`)).body;
+      const item = view.items.find((i) => i.prompt === germanPrompt)!;
+      const choice = (
+        await server.get<DrillChoice>(`/api/s/tests/${testId}/drill/${item.wordId}/choice`)
+      ).body;
+      const marks = [];
+      for (const option of choice.options) {
+        const feedback = (
+          await server.post<DrillFeedback>(`/api/s/tests/${testId}/drill`, {
+            wordId: item.wordId,
+            given: option,
+          })
+        ).body;
+        marks.push({ option, correct: feedback.correct });
+      }
+      return { choice, marks };
+    });
+  }
+
+  it('offers the word back with exactly one right option, and marks it by the same grader', async () => {
+    await publish();
+    const { choice, marks } = await choiceFor('widerwillig');
+
+    expect(choice.prompt).toBe('widerwillig');
+    expect(choice.options.length).toBeGreaterThanOrEqual(3);
+    expect(marks.filter((m) => m.correct).map((m) => m.option)).toEqual(['reluctant']);
+  });
+
+  it('never hands over which option is right', async () => {
+    await publish();
+    const raw = await asStudent(async () => {
+      const view = (await server.get<DrillView>(`/api/s/tests/${testId}/drill`)).body;
+      return (await server.get(`/api/s/tests/${testId}/drill/${view.items[0]!.wordId}/choice`)).body;
+    });
+    const serialised = JSON.stringify(raw);
+    expect(serialised).not.toContain('correctIndex');
+    expect(serialised).not.toContain('accepted');
+  });
+
+  // The decision: the test's own multiple choice carries the traps the model
+  // wrote, and practising on them would spend them before the sprint. So the
+  // choice is built from the word list, never from the stored questions.
+  it('is built from the word list, never from the test’s own trap options', async () => {
+    await server.post(`/api/admin/tests/${testId}/generate`);
+    const questions = (await server.get(`/api/admin/tests/${testId}/questions`)).body.questions;
+    for (const question of questions) {
+      await server.patch(`/api/admin/tests/${testId}/questions/${question.id}`, {
+        payload: {
+          type: 'mcq_translation',
+          direction: 'de_en',
+          prompt: 'x',
+          options: ['zzz-trap-1', 'zzz-trap-2', 'zzz-trap-3', 'right'],
+          correctIndex: 3,
+        },
+      });
+    }
+    await server.post(`/api/admin/tests/${testId}/publish`);
+
+    const { choice } = await choiceFor('widerwillig');
+    expect(choice.options.some((option) => option.startsWith('zzz-trap'))).toBe(false);
+  });
+
+  // A wrong option the grader would accept is a second right answer, and a
+  // choice with two right answers teaches nothing. Near-synonyms are exactly
+  // the failure the test's own distractors still have.
+  it('leaves out an option that would also count as right', async () => {
+    const words = (await server.get(`/api/admin/tests/${testId}/words`)).body;
+    const reluctant = words.find((w: { headwordEn: string }) => w.headwordEn === 'reluctant');
+    // "thorough" is on the list as its own word, and nearest in difficulty.
+    await server.patch(`/api/admin/tests/${testId}/words/${reluctant.id}`, {
+      acceptedEn: ['thorough'],
+    });
+    await publish();
+
+    const { choice, marks } = await choiceFor('widerwillig');
+    expect(choice.options).not.toContain('thorough');
+    expect(marks.filter((m) => m.correct)).toHaveLength(1);
+  });
+
+  it('offers no choice when the list is too short to make a fair one', async () => {
+    const short = (await server.post('/api/admin/tests', { classId, title: 'Two words' })).body.id;
+    await server.post(`/api/admin/tests/${short}/words/paste`, {
+      text: 'reluctant;widerwillig\nthorough;gründlich',
+    });
+    const view = (await server.get<DrillView>(`/api/admin/tests/${short}/drill`)).body;
+    const choice = (
+      await server.get<DrillChoice>(`/api/admin/tests/${short}/drill/${view.items[0]!.wordId}/choice`)
+    ).body;
+
+    expect(choice.options).toEqual([]);
+    expect(choice.prompt).toBeTruthy();
+  });
+
+  it('keeps to the same rules as the drill: not while the test is open', async () => {
+    await publish();
+    await server.post(`/api/admin/tests/${testId}/open`);
+    const wordId = (await server.get(`/api/admin/tests/${testId}/words`)).body[0].id;
+
+    const res = await asStudent(async () =>
+      server.get(`/api/s/tests/${testId}/drill/${wordId}/choice`),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('refuses a word that is not on the list', async () => {
+    await publish();
+    const res = await asStudent(async () =>
+      server.get(`/api/s/tests/${testId}/drill/made-up/choice`),
     );
     expect(res.status).toBe(404);
   });

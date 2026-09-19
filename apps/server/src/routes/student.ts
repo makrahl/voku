@@ -27,7 +27,7 @@ import {
   type AttemptRow,
 } from '../services/attempts.js';
 import { includedWords, type TestRow } from '../services/tests.js';
-import { drillItems, drillPayloads } from '../services/drill.js';
+import { drillChoice, drillItems, drillPayloads } from '../services/drill.js';
 import { gradeAnswer } from '../services/grading.js';
 import { annotateText } from '../services/annotate.js';
 import type { Db } from '../db/index.js';
@@ -191,6 +191,18 @@ studentRouter.get(
     const test = testOf(req.db, param(req, 'id'), req.student!.class_id);
     assertRevisable(test);
     res.json({ title: test.title, items: drillItems(req.db, test) } satisfies DrillView);
+  }),
+);
+
+/** A missed word, offered back as a choice before it is asked to be typed again. */
+studentRouter.get(
+  '/tests/:id/drill/:wordId/choice',
+  route((req, res) => {
+    const test = testOf(req.db, param(req, 'id'), req.student!.class_id);
+    assertRevisable(test);
+    const choice = drillChoice(req.db, test, param(req, 'wordId'));
+    if (!choice) throw notFound('No such word in this test');
+    res.json(choice);
   }),
 );
 

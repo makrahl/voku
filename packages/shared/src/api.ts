@@ -277,6 +277,21 @@ export interface DrillView {
   items: DrillItem[];
 }
 
+/**
+ * The same word offered as a choice, for a second attempt after a miss.
+ *
+ * Built from the other words on the list, never from the test's own multiple
+ * choice — those carry the traps the model wrote, and seeing them in practice
+ * would spend them before the test.
+ */
+export interface DrillChoice {
+  wordId: string;
+  prompt: string;
+  direction: QuestionDirection;
+  /** Empty when the list is too short, or too full of synonyms, for a fair choice. */
+  options: string[];
+}
+
 export interface DrillFeedback {
   correct: boolean;
   /** Wrong by one letter — shows the right spelling without softening the mark. */
