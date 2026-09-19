@@ -116,6 +116,12 @@ function Home() {
     refetchInterval: 5000,
   });
 
+  // Not polled like the rest of home: it only changes when a test closes.
+  const myWords = useQuery({
+    queryKey: ['student', 'my-words'],
+    queryFn: () => api.get<MyWordsView>(student('/my-words')),
+  });
+
   if (isLoading) return <Centred><Spinner /></Centred>;
   if (error) {
     return (
@@ -126,6 +132,11 @@ function Home() {
     );
   }
   if (!data) return null;
+
+  // One accent button on the page, for whatever matters most right now. The
+  // accent is rationed; three of them in a column stop meaning "this one".
+  const testRunning = data.openTests.length > 0;
+  const hasOwnWords = (myWords.data?.words.length ?? 0) > 0;
 
   return (
     <Screen>
@@ -174,10 +185,10 @@ function Home() {
                 <Row key={list.id} onClick={() => navigate(`/s/tests/${list.id}/words`)}>
                   <span className="flex-1 text-xl">{list.title}</span>
                   <span className="text-sm text-ink-40">{list.wordCount} words</span>
-                  {/* Practising is the thing they are here to do, so it is one
-                      tap from the front door rather than inside the list. */}
+                  {/* One tap from the front door, but never the accent: there can
+                      be several lists, and none of them is more urgent than the
+                      others. */}
                   <Button
-                    variant="primary"
                     onClick={(event) => {
                       event.stopPropagation();
                       navigate(`/s/tests/${list.id}/drill`);
@@ -191,7 +202,9 @@ function Home() {
           </section>
         ) : null}
 
-        <MyWordsSection />
+        {myWords.data ? (
+          <MyWordsSection data={myWords.data} primary={!testRunning && hasOwnWords} />
+        ) : null}
 
         {data.pastAttempts.length > 0 ? (
           <section className="flex flex-col gap-6">
@@ -226,15 +239,17 @@ const MY_WORDS_SHOWN = 5;
  * list empties, because a list that only ever grows would be a reason to stop
  * looking at it.
  */
-function MyWordsSection() {
+function MyWordsSection({
+  data,
+  primary,
+}: {
+  data: MyWordsView;
+  /** The page's one accent button — unless a test is open, which outranks it. */
+  primary: boolean;
+}) {
   const navigate = useNavigate();
-  // Not polled like the rest of home: it only changes when a test closes.
-  const { data } = useQuery({
-    queryKey: ['student', 'my-words'],
-    queryFn: () => api.get<MyWordsView>(student('/my-words')),
-  });
 
-  if (!data || (data.words.length === 0 && data.cleared === 0)) return null;
+  if (data.words.length === 0 && data.cleared === 0) return null;
   const more = data.words.length - MY_WORDS_SHOWN;
 
   return (
@@ -242,7 +257,10 @@ function MyWordsSection() {
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <span className="label">Words to work on</span>
         {data.words.length > 0 ? (
-          <Button variant="primary" onClick={() => navigate('/s/my-words/drill')}>
+          <Button
+            variant={primary ? 'primary' : 'secondary'}
+            onClick={() => navigate('/s/my-words/drill')}
+          >
             Practise them
           </Button>
         ) : null}
