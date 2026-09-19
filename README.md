@@ -97,8 +97,10 @@ carried over unless the teacher ticks it. A word that comes back is labelled
 *from Unit 3* wherever students meet it.
 
 Once a test is published, students can **practise** from their study list: the
-word pairs, in both directions, as often as they like, with a second round of
-just the ones they missed. It drills the pairs and never the test's own
+word pairs, as often as they like. A missed word comes back a few cards later —
+first as a choice built from the other words on the list, then to type again —
+and only counts as known once it has been typed. It drills the pairs and never
+the test's own
 questions — those are identical for everyone and in a fixed order, so rehearsing
 them would measure repetition rather than knowledge. Nothing about practice is
 stored or reported.

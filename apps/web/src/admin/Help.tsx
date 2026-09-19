@@ -231,8 +231,11 @@ const TOPICS: Topic[] = [
       <>
         <p>
           Once you publish a test, its word list appears on every student's screen with a{' '}
-          <b>Practise</b> button. That drills the word pairs — English to German and back — as often
-          as they like, and offers a second round of just the ones they missed.
+          <b>Practise</b> button. That drills the word pairs as often as they like. A word they miss
+          comes back a few cards later rather than at the end — first as a choice of four, then to
+          type again, because recognising a word comes before producing it. It only counts as
+          known once it has been typed. The round ends with how many were right first time and a
+          second round of just the ones that needed another go.
         </p>
         <p>
           It deliberately does <b>not</b> use the test's own questions. They would be the same
