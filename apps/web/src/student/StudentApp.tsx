@@ -116,10 +116,13 @@ function Home() {
     refetchInterval: 5000,
   });
 
-  // Not polled like the rest of home: it only changes when a test closes.
+  // Not polled like the rest of home: it only changes when a test closes. Held
+  // back while one runs, so that the moment it closes — which is exactly when
+  // new misses arrive — becoming enabled fetches the list afresh.
   const myWords = useQuery({
     queryKey: ['student', 'my-words'],
     queryFn: () => api.get<MyWordsView>(student('/my-words')),
+    enabled: data ? !data.revisionPaused : false,
   });
 
   if (isLoading) return <Centred><Spinner /></Centred>;
@@ -177,7 +180,18 @@ function Home() {
           )}
         </section>
 
-        {data.studyLists.length > 0 ? (
+        {/* While any test in the class runs, home is the test and nothing else.
+            A word brought back from an earlier unit is also a question now, so
+            an earlier list would be the answers on screen — the server refuses
+            them too; this only saves a student tapping into a closed door. */}
+        {data.revisionPaused ? (
+          <p className="max-w-prose text-ink-60">
+            Word lists and practice are paused while a test is running. They come back as soon as
+            it closes.
+          </p>
+        ) : null}
+
+        {!data.revisionPaused && data.studyLists.length > 0 ? (
           <section className="flex flex-col gap-6">
             <span className="label">Words to learn</span>
             <Rows>
@@ -202,11 +216,11 @@ function Home() {
           </section>
         ) : null}
 
-        {myWords.data ? (
+        {!data.revisionPaused && myWords.data ? (
           <MyWordsSection data={myWords.data} primary={!testRunning && hasOwnWords} />
         ) : null}
 
-        {data.pastAttempts.length > 0 ? (
+        {!data.revisionPaused && data.pastAttempts.length > 0 ? (
           <section className="flex flex-col gap-6">
             <span className="label">Finished</span>
             <Rows>
@@ -808,29 +822,26 @@ function Review() {
 
         {/* Two different things, so they say which is which. The words come
             first: they carry into the next test, where these questions do not. */}
-        <div className="flex flex-col items-center gap-3">
+        {/* While a test is running both kinds of practice are refused — each
+            shows answers — so neither is offered, rather than a button that
+            leads to a closed door. */}
+        {data.canPractiseWords ? (
           <div className="flex flex-wrap justify-center gap-4">
-            {data.canPractiseWords ? (
-              <Button
-                variant="primary"
-                onClick={() => navigate(`/s/tests/${data.attempt.testId}/drill`)}
-              >
-                Practise the words
-              </Button>
-            ) : null}
             <Button
-              variant={data.canPractiseWords ? 'secondary' : 'primary'}
-              onClick={() => navigate(`/s/tests/${data.attempt.testId}/practice`)}
+              variant="primary"
+              onClick={() => navigate(`/s/tests/${data.attempt.testId}/drill`)}
             >
+              Practise the words
+            </Button>
+            <Button onClick={() => navigate(`/s/tests/${data.attempt.testId}/practice`)}>
               Try the questions again
             </Button>
           </div>
-          {!data.canPractiseWords ? (
-            <p className="text-sm text-ink-40">
-              The word list comes back once everyone has finished.
-            </p>
-          ) : null}
-        </div>
+        ) : (
+          <p className="text-center text-sm text-ink-40">
+            Practice comes back once everyone has finished.
+          </p>
+        )}
       </div>
     </Screen>
   );
