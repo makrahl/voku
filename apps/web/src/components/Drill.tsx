@@ -1,7 +1,19 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { DrillFeedback, DrillItem, DrillView } from '@voku/shared';
+import type { DrillChoice, DrillFeedback, DrillItem, DrillView } from '@voku/shared';
 import { api } from '../lib/api.ts';
+import {
+  answer as record,
+  current as currentCard,
+  done,
+  isOver,
+  isReturn,
+  neededAnotherGo,
+  startRound,
+  tally,
+  type DrillMode,
+  type Round,
+} from '../lib/drill-round.ts';
 import { Button, Empty, Spinner } from './ui.tsx';
 import { FeedbackFlash, QuestionCard, useFlash } from './Sprint.tsx';
 
@@ -10,6 +22,8 @@ import { FeedbackFlash, QuestionCard, useFlash } from './Sprint.tsx';
  *
  * One component for the class and for the teacher previewing them, so a preview
  * cannot quietly differ from the thing it is previewing — only the path differs.
+ * The order of a round — when a missed word comes back, and whether as a choice
+ * or typed — lives in `lib/drill-round.ts`, where it can be read on its own.
  *
  * Nothing is stored anywhere: the run lives here and dies with the tab, which is
  * the honest shape for something the server deliberately does not remember.
@@ -27,10 +41,7 @@ export function Drill({
   /** Sits at the right of the header — "Close" for a student, "Done" for a preview. */
   action: ReactNode;
 }) {
-  const [queue, setQueue] = useState<DrillItem[] | null>(null);
-  const [at, setAt] = useState(0);
-  const [missed, setMissed] = useState<DrillItem[]>([]);
-  const [right, setRight] = useState(0);
+  const [round, setRound] = useState<Round | null>(null);
   const [busy, setBusy] = useState(false);
   const { feedback, show } = useFlash<DrillFeedback>();
 
@@ -39,16 +50,27 @@ export function Drill({
     queryFn: () => api.get<DrillView>(path),
   });
 
-  const begin = useCallback((items: DrillItem[]) => {
-    setQueue(shuffled(items));
-    setAt(0);
-    setMissed([]);
-    setRight(0);
-  }, []);
+  const items = useMemo(
+    () => new Map((data?.items ?? []).map((item) => [item.wordId, item])),
+    [data],
+  );
+
+  const begin = useCallback((wordIds: string[]) => setRound(startRound(shuffled(wordIds))), []);
 
   useEffect(() => {
-    if (data && queue === null) begin(data.items);
-  }, [data, queue, begin]);
+    if (data && round === null) begin(data.items.map((item) => item.wordId));
+  }, [data, round, begin]);
+
+  const card = round ? currentCard(round) : undefined;
+  const item = card ? items.get(card.wordId) : undefined;
+
+  // Only fetched when a missed word comes back; the first outing is always typed.
+  const choice = useQuery({
+    queryKey: [...queryKey, 'choice', card?.wordId],
+    queryFn: () => api.get<DrillChoice>(`${path}/${card!.wordId}/choice`),
+    enabled: card?.mode === 'choice',
+    staleTime: Infinity,
+  });
 
   if (isLoading) return <Spinner />;
   if (error || !data) {
@@ -61,20 +83,20 @@ export function Drill({
   if (data.items.length === 0) {
     return <Empty title="No words yet">Add some words and they will appear here to practise.</Empty>;
   }
+  if (!round) return <Spinner />;
 
-  const items = queue ?? [];
-  const current = items[at];
+  // A choice card with no fair choice to offer is simply asked as typing again.
+  const askedAs: DrillMode =
+    card?.mode === 'choice' && (choice.data?.options.length ?? 0) > 0 ? 'choice' : 'typed';
+  const waitingForChoice = card?.mode === 'choice' && choice.isLoading;
 
-  const answer = async (given: string) => {
-    if (!current || busy) return;
+  const submit = async (given: string) => {
+    if (!card || busy) return;
     setBusy(true);
     try {
-      const result = await api.post<DrillFeedback>(path, { wordId: current.wordId, given });
-      if (result.correct) setRight((n) => n + 1);
-      else setMissed((list) => [...list, current]);
-
+      const result = await api.post<DrillFeedback>(path, { wordId: card.wordId, given });
       show(result, () => {
-        setAt((n) => n + 1);
+        setRound((r) => (r ? record(r, result.correct, askedAs) : r));
         setBusy(false);
       });
     } catch {
@@ -82,14 +104,34 @@ export function Drill({
     }
   };
 
+  const over = isOver(round);
+  const counts = tally(round);
+  const again = neededAnotherGo(round);
+
+  // Said quietly above the question: where the word is from, and why it is back.
+  const note = card
+    ? [
+        item?.repeatedFrom ? `from ${item.repeatedFrom}` : null,
+        isReturn(round, card)
+          ? askedAs === 'choice'
+            ? 'another go — pick the right one'
+            : 'now type it yourself'
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+
   return (
     <div className="flex flex-1 flex-col">
       <header className="rule-b flex flex-wrap items-baseline justify-between gap-4 pb-5">
         {heading}
         <div className="flex items-center gap-6">
-          {current ? (
+          {!over ? (
+            // Words, not cards: a missed word coming back must not make the
+            // total jump, or the round looks like it is getting longer.
             <span className="tabular text-sm text-ink-40">
-              {at + 1}/{items.length}
+              {done(round)}/{round.total}
             </span>
           ) : null}
           {action}
@@ -99,28 +141,33 @@ export function Drill({
       {/* No progress line: its tick marks the sprint's target, and practice has
           no target to reach. The count in the header is the whole story. */}
       <div className="flex flex-1 flex-col justify-center py-10">
-        {!current ? (
+        {over ? (
           <div className="flex flex-col items-center gap-6 text-center">
-            <span className="label">Practice</span>
+            <span className="label">Right first time</span>
             <p className="text-display font-semibold tracking-tight">
-              {right}
-              <span className="text-ink-40">/{items.length}</span>
+              {counts.first}
+              <span className="text-ink-40">/{round.total}</span>
             </p>
             <p className="max-w-md text-lg text-ink-40">
-              {missed.length === 0
+              {again.length === 0
                 ? 'All of them. Nothing left to practise here.'
-                : `${missed.length} still to get. Practising costs nothing — go again.`}
+                : [
+                    counts.recovered > 0 ? `${counts.recovered} got there on another go` : null,
+                    counts.missed > 0 ? `${counts.missed} still to learn` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(', ') + '. Practising costs nothing — go again.'}
             </p>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-4">
-              {missed.length > 0 ? (
-                <Button variant="primary" size="lg" onClick={() => begin(missed)}>
-                  The ones I missed
+              {again.length > 0 ? (
+                <Button variant="primary" size="lg" onClick={() => begin(again)}>
+                  The ones that needed another go
                 </Button>
               ) : null}
               <Button
-                variant={missed.length > 0 ? 'secondary' : 'primary'}
+                variant={again.length > 0 ? 'secondary' : 'primary'}
                 size="lg"
-                onClick={() => begin(data.items)}
+                onClick={() => begin(data.items.map((i) => i.wordId))}
               >
                 All of them again
               </Button>
@@ -128,28 +175,35 @@ export function Drill({
           </div>
         ) : feedback ? (
           <FeedbackFlash feedback={feedback} />
+        ) : waitingForChoice || !card || !item ? (
+          <Spinner />
         ) : (
           <div className="flex flex-col gap-6">
-            {/* Above the question, not beside it: it says where the word is from,
-                which is context for revising, not a hint towards the answer. */}
-            {current.repeatedFrom ? (
-              <p className="label text-center">from {current.repeatedFrom}</p>
-            ) : null}
+            {note ? <p className="label text-center">{note}</p> : null}
             <QuestionCard
-            question={{
-              id: current.wordId,
-              index: at,
-              total: items.length,
-              payload: {
-                type: 'translate_input',
-                direction: current.direction,
-                prompt: current.prompt,
-              },
-            }}
+              question={{
+                // Per card, not per word: the same word comes back, and its input
+                // must start empty and take focus again when it does.
+                id: `${card.wordId}:${round.at}`,
+                index: round.at,
+                total: round.cards.length,
+                payload:
+                  askedAs === 'choice'
+                    ? {
+                        type: 'mcq_translation',
+                        direction: item.direction,
+                        prompt: item.prompt,
+                        options: choice.data!.options,
+                      }
+                    : { type: 'translate_input', direction: item.direction, prompt: item.prompt },
+              }}
               disabled={busy}
               chosen={null}
               correctAnswer={null}
-              onAnswer={(given) => void answer(given)}
+              onAnswer={(given) =>
+                // A choice answers with the option's position; the grader wants its text.
+                void submit(askedAs === 'choice' ? choice.data!.options[Number(given)]! : given)
+              }
             />
           </div>
         )}
