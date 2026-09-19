@@ -6,6 +6,11 @@ name: Deploy
 on:
   push:
     branches: [main]
+  # A change arriving as a pull request has to face the same gate, and face it
+  # *before* the merge — merging is what deploys, so a merge is the last moment
+  # the tests could still be useful.
+  pull_request:
+    branches: [main]
   # Rollback path: run this by hand with an older commit SHA.
   workflow_dispatch:
     inputs:
@@ -13,11 +18,6 @@ on:
         description: 'Commit or ref to deploy (default: origin/main)'
         required: false
         default: ''
-
-concurrency:
-  # Two deploys at once would fight over the same checkout on the server.
-  group: deploy
-  cancel-in-progress: false
 
 jobs:
   test:
@@ -34,7 +34,14 @@ jobs:
 
   deploy:
     needs: test
+    # Never from a pull request. A fork's branch is not trusted code, and this
+    # job holds the key to the server.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    concurrency:
+      # Two deploys at once would fight over the same checkout on the server.
+      group: deploy
+      cancel-in-progress: false
     steps:
       - name: Open an SSH session to the server
         env:
