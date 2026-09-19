@@ -225,6 +225,32 @@ const TOPICS: Topic[] = [
     ),
   },
   {
+    title: 'Each student’s own words to work on',
+    summary: 'What a student sees of their own mistakes, and what you do not.',
+    body: (
+      <>
+        <p>
+          On their home screen, every student sees <b>Words to work on</b>: the words they got
+          wrong in a test and have not got right since, gathered across all your units, with a
+          button to practise them.
+        </p>
+        <p>
+          Only their own answers from tests you have closed count, and only questions they
+          actually reached — not getting to word 35 is not the same as getting it wrong. Practice
+          runs do not count. A word leaves the list once they get it right in a later test, which
+          is where bringing words back from earlier units pays off twice. If you accept a spelling
+          in the regrade panel, it leaves their list too.
+        </p>
+        <p>
+          <b>You do not see these lists.</b> Nothing new is recorded to make them — the answers
+          were already kept for the review screen — and the class results already tell you which
+          words the class did not know. A per-child list of failures would be a different thing,
+          and not one this app keeps.
+        </p>
+      </>
+    ),
+  },
+  {
     title: 'Practice, and what students see afterwards',
     summary: 'Revising beforehand, retaking afterwards, and reviewing the misses.',
     body: (

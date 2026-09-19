@@ -96,6 +96,12 @@ rather than for individual students, and it only ever suggests: nothing is
 carried over unless the teacher ticks it. A word that comes back is labelled
 *from Unit 3* wherever students meet it.
 
+Each student also sees their own **words to work on** — the words they got
+wrong in a test and have not got right since, across every unit — and can
+practise them. It is built from answers already kept, counts only closed tests
+and questions they reached, and is never shown to the teacher. A word leaves the
+list when it is got right in a later test.
+
 Once a test is published, students can **practise** from their study list: the
 word pairs, as often as they like. A missed word comes back a few cards later —
 first as a choice built from the other words on the list, then to type again —
