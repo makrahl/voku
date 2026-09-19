@@ -56,12 +56,17 @@ export function dueWords(db: Db, classId: string, excludeTestId: string, now = n
             t.id                              AS from_test_id,
             t.title                           AS from_test_title,
             COALESCE(t.closed_at, t.opened_at) AS tested_at,
-            COUNT(a.id)                       AS reached,
-            COALESCE(SUM(a.is_correct), 0)    AS correct
+            COUNT(at2.id)                     AS reached,
+            COALESCE(SUM(CASE WHEN at2.id IS NULL THEN 0 ELSE a.is_correct END), 0) AS correct
        FROM tests t
        JOIN test_words w ON w.test_id = t.id AND w.included = 1
        LEFT JOIN questions q ON q.word_id = w.id
        LEFT JOIN answers   a ON a.question_id = q.id
+       -- Practice must not count. The mode test cannot move to WHERE and the join
+       -- cannot become inner: both would drop the words nobody ever reached,
+       -- which are exactly the ones most worth offering again. So the joins stay
+       -- outer and the counting reads at2 rather than a — at2 is non-null only
+       -- for a graded answer, which makes COUNT(at2.id) the graded count.
        LEFT JOIN attempts  at2 ON at2.id = a.attempt_id AND at2.mode = 'graded'
       WHERE t.class_id = :class
         AND t.id != :exclude

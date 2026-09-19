@@ -48,6 +48,50 @@ async function due(testId: string): Promise<DueWord[]> {
   return (await server.get<DueWord[]>(`/api/admin/tests/${testId}/due-words`)).body;
 }
 
+/**
+ * One answer to the word in a unit, as though a student had sat it.
+ *
+ * Inserted rather than played through the API because a closed test cannot be
+ * answered any more, and what is under test is the counting, not the route.
+ */
+function answerWord(
+  testId: string,
+  headword: string,
+  opts: { mode: 'graded' | 'practice'; correct: boolean },
+): void {
+  const question = server.db.get<{ id: string }>(
+    `SELECT q.id FROM questions q
+       JOIN test_words w ON w.id = q.word_id
+      WHERE w.test_id = :t AND w.headword_en = :h
+      LIMIT 1`,
+    { t: testId, h: headword },
+  )!;
+  const student = `stu-${opts.mode}-${headword}`;
+  const attempt = `att-${opts.mode}-${headword}`;
+  server.db.run(
+    `INSERT OR IGNORE INTO students (id, class_id, name, token, created_at)
+     VALUES (:id, :class, :name, :token, :now)`,
+    { id: student, class: classId, name: 'Mara', token: `tok-${student}`, now: new Date().toISOString() },
+  );
+  server.db.run(
+    `INSERT INTO attempts (id, test_id, student_id, mode, started_at, target_snapshot)
+     VALUES (:id, :test, :student, :mode, :now, 1)`,
+    { id: attempt, test: testId, student, mode: opts.mode, now: new Date().toISOString() },
+  );
+  server.db.run(
+    `INSERT INTO answers (id, attempt_id, question_id, given_text, is_correct, answered_at)
+     VALUES (:id, :attempt, :question, :given, :correct, :now)`,
+    {
+      id: `ans-${attempt}`,
+      attempt,
+      question: question.id,
+      given: opts.correct ? headword : 'nonsense',
+      correct: opts.correct ? 1 : 0,
+      now: new Date().toISOString(),
+    },
+  );
+}
+
 describe('which words are due to come round again', () => {
   it('offers a word from a unit long past, and holds back one from last week', async () => {
     await pastUnit('Unit 1', 'ambush;Hinterhalt', 40);
@@ -233,6 +277,35 @@ describe('taking the due words into the new test', () => {
     await server.post(`/api/admin/tests/${plain}/words/paste`, { text: 'weary;müde' });
     const noRepeat = (await server.get(`/api/admin/tests/${plain}/worksheet`)).body;
     expect(noRepeat.columns).not.toContain('from');
+  });
+
+  /**
+   * Practice is unlimited and unmarked, so counting it would let a class that
+   * revised hard look like a class that knew the words — and the schedule would
+   * push those words further away for exactly the wrong reason. This is the
+   * decision, stated as a test.
+   */
+  it('judges a word on the graded test only, and ignores how practice went', async () => {
+    const unit = await pastUnit('Unit 1', 'ambush;Hinterhalt', 40);
+    answerWord(unit, 'ambush', { mode: 'graded', correct: false });
+    answerWord(unit, 'ambush', { mode: 'practice', correct: true });
+
+    const [word] = await due(await newTest());
+
+    // One graded answer, and it was wrong. Not two answers at 50%.
+    expect(word!.correctRate).toBe(0);
+    // Struggled, so it comes back sooner than the ten-day base gap.
+    expect(word!.dueInDays).toBeLessThan(10 - 40);
+  });
+
+  it('still offers a word nobody ever reached, which has no rate at all', async () => {
+    await pastUnit('Unit 1', 'ambush;Hinterhalt', 40);
+
+    const [word] = await due(await newTest());
+
+    // The outer joins exist for this: no answers must not mean no word.
+    expect(word!.headwordEn).toBe('ambush');
+    expect(word!.correctRate).toBeNull();
   });
 
   it('will not import a word from another teacher’s class', async () => {
