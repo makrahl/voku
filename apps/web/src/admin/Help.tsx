@@ -129,8 +129,10 @@ const TOPICS: Topic[] = [
           <b>Practise</b> drills the pairs.
         </p>
         <p>
-          <b>Open the test</b> when the lesson starts. The word list disappears while the sprint is
-          running and comes back once you close it. Each student's clock starts when <i>they</i> tap
+          <b>Open the test</b> when the lesson starts. While it is open, every student’s word lists,
+          practice and reviews of earlier units are paused — a word brought back from an earlier
+          unit is also a question now, so an old list would show the answer. They come back the
+          moment you close the test. Each student's clock starts when <i>they</i> tap
           Start, so a latecomer still gets their full time, and a device with the wrong clock gains
           nothing — the server keeps time, not the iPad.
         </p>
