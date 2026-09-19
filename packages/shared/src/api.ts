@@ -348,6 +348,8 @@ export interface StudentHomeView {
   openTests: Array<{ id: string; title: string; durationSeconds: number; attemptId: string | null; submitted: boolean }>;
   studyLists: Array<{ id: string; title: string; wordCount: number }>;
   pastAttempts: Array<{ attemptId: string; testId: string; testTitle: string; percent: number; correctCount: number; targetCount: number; submittedAt: string }>;
+  /** A test in the class is running, so every list and practice is paused. */
+  revisionPaused: boolean;
 }
 
 export interface ResultRow {

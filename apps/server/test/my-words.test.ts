@@ -108,10 +108,11 @@ describe('a student’s own words to work on', () => {
   });
 
   // While the test runs, an early finisher's list would be answers the others
-  // are still working on.
-  it('shows nothing from a test that is still open, and everything once it closes', async () => {
+  // are still working on — so the whole list is paused, not merely filtered.
+  it('is paused while the test is still open, and complete once it closes', async () => {
     const id = await sitUnit('Unit 1', UNIT, { wrong: ['thorough'], close: false });
-    expect((await mine()).words).toEqual([]);
+    await server.post('/api/s/session', { token: lena });
+    expect((await server.get('/api/s/my-words')).status).toBe(403);
 
     await server.post(`/api/admin/tests/${id}/close`);
     expect((await mine()).words.map((w) => w.headwordEn)).toEqual(['thorough']);
