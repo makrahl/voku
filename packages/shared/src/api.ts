@@ -277,6 +277,23 @@ export interface DrillView {
   items: DrillItem[];
 }
 
+/** A word a student got wrong in a test and has not got right since. */
+export interface MyWord {
+  wordId: string;
+  headwordEn: string;
+  translationDe: string;
+  /** The unit where it was last missed. */
+  fromTestTitle: string;
+  timesMissed: number;
+}
+
+/** A student's own words to work on — shown to them, never to the teacher. */
+export interface MyWordsView {
+  words: MyWord[];
+  /** Words once missed and answered correctly in a test since. */
+  cleared: number;
+}
+
 /**
  * The same word offered as a choice, for a second attempt after a miss.
  *

@@ -28,6 +28,7 @@ import {
 } from '../services/attempts.js';
 import { includedWords, type TestRow } from '../services/tests.js';
 import { drillChoice, drillItems, drillPayloads } from '../services/drill.js';
+import { myWordChoice, myWordPayload, myWords, myWordsDrill } from '../services/my-words.js';
 import { gradeAnswer } from '../services/grading.js';
 import { annotateText } from '../services/annotate.js';
 import type { Db } from '../db/index.js';
@@ -222,6 +223,56 @@ studentRouter.post(
 
     // The same grader the real sprint uses, so practice teaches the same
     // strictness — a spelling accepted here must be accepted there.
+    const grade = gradeAnswer(payload, given);
+    res.json({
+      correct: grade.correct,
+      almost: grade.almost,
+      correctAnswer: grade.correctAnswer,
+    } satisfies DrillFeedback);
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// The student's own words to work on
+//
+// Shaped like a test's drill — list, choice, mark — so the practice screen is
+// the same component pointed at a different path. Scoped to the signed-in
+// student throughout; there is no teacher-side equivalent, by design.
+// ---------------------------------------------------------------------------
+
+studentRouter.get(
+  '/my-words',
+  route((req, res) => {
+    res.json(myWords(req.db, req.student!.id));
+  }),
+);
+
+studentRouter.get(
+  '/my-words/drill',
+  route((req, res) => {
+    res.json({
+      title: 'Words to work on',
+      items: myWordsDrill(req.db, req.student!.id),
+    } satisfies DrillView);
+  }),
+);
+
+studentRouter.get(
+  '/my-words/drill/:wordId/choice',
+  route((req, res) => {
+    const choice = myWordChoice(req.db, req.student!.id, param(req, 'wordId'));
+    if (!choice) throw notFound('That word is not on your list');
+    res.json(choice);
+  }),
+);
+
+studentRouter.post(
+  '/my-words/drill',
+  route((req, res) => {
+    const { wordId, given } = parseBody(DrillAnswerSchema, req.body);
+    const payload = myWordPayload(req.db, req.student!.id, wordId);
+    if (!payload) throw notFound('That word is not on your list');
+
     const grade = gradeAnswer(payload, given);
     res.json({
       correct: grade.correct,
