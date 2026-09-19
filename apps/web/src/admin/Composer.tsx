@@ -5,6 +5,7 @@ import {
   DEFAULT_MIX,
   QUESTION_TYPES,
   type AchievedMix,
+  type DueWord,
   type MixWeights,
   type QuestionType,
   type QuestionView,
@@ -13,6 +14,8 @@ import {
   type WordView,
 } from '@voku/shared';
 import { ApiError, admin, api, waitForJob } from '../lib/api.ts';
+import { Drill } from '../components/Drill.tsx';
+import { Worksheet } from './Worksheet.tsx';
 import type { JobView } from '@voku/shared';
 import {
   Button,
@@ -39,7 +42,14 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   fill_blank: 'Fill in the blank',
 };
 
-const STEPS = ['Text', 'Words', 'Design', 'Questions', 'Open'] as const;
+/**
+ * The order follows the classroom, not the database: build the test, print the
+ * sheet, let them revise for a week, then run the five minutes. Publishing lives
+ * in Practise rather than Open, because publishing is what starts the revising —
+ * it used to sit next to "Open the test", which put a week and five minutes in
+ * the same step.
+ */
+const STEPS = ['Text', 'Words', 'Design', 'Questions', 'Worksheet', 'Practise', 'Open'] as const;
 
 export function Composer() {
   const { testId = '' } = useParams();
@@ -62,6 +72,9 @@ export function Composer() {
     void queryClient.invalidateQueries({ queryKey: ['admin', 'test', testId] });
     void queryClient.invalidateQueries({ queryKey: ['admin', 'words', testId] });
     void queryClient.invalidateQueries({ queryKey: ['admin', 'questions', testId] });
+    // The sheet is built from the words, so it goes stale with them — and the
+    // teacher who just filled the gaps looks at the sheet, not the word list.
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'worksheet', testId] });
     // Wakes the poller: it stops when nothing is running.
     void queryClient.invalidateQueries({ queryKey: ['admin', 'active-job', testId] });
   };
@@ -98,6 +111,7 @@ export function Composer() {
     void queryClient.invalidateQueries({ queryKey: ['admin', 'test', testId] });
     void queryClient.invalidateQueries({ queryKey: ['admin', 'words', testId] });
     void queryClient.invalidateQueries({ queryKey: ['admin', 'questions', testId] });
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'worksheet', testId] });
   }, [latest, queryClient, testId]);
 
   const lifecycle = useMutation({
@@ -116,7 +130,8 @@ export function Composer() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      {/* Chrome: it belongs on the screen, never on a sheet handed to a class. */}
+      <div className="no-print flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
           <Link
             to={`/admin/classes/${test.data.classId}`}
@@ -142,7 +157,7 @@ export function Composer() {
         </div>
       </div>
 
-      <nav className="rule-b flex flex-wrap gap-8 pb-4">
+      <nav className="no-print rule-b flex flex-wrap gap-8 pb-4">
         {STEPS.map((label, index) => (
           <button
             key={label}
@@ -188,6 +203,21 @@ export function Composer() {
         <QuestionsStep test={test.data} aiReady={aiReady} onDone={refresh} job={running} />
       ) : null}
       {step === 4 ? (
+        <Worksheet
+          testId={test.data.id}
+          aiReady={aiReady}
+          editable={test.data.status !== 'open'}
+          onStarted={refresh}
+        />
+      ) : null}
+      {step === 5 ? (
+        <PractiseStep
+          test={test.data}
+          onAction={(action) => lifecycle.mutate(action)}
+          pending={lifecycle.isPending}
+        />
+      ) : null}
+      {step === 6 ? (
         <OpenStep
           test={test.data}
           onAction={(action) => lifecycle.mutate(action)}
@@ -195,7 +225,7 @@ export function Composer() {
         />
       ) : null}
 
-      <div className="rule-t flex justify-between pt-6">
+      <div className="no-print rule-t flex justify-between pt-6">
         <Button disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>
           Back
         </Button>
@@ -243,7 +273,9 @@ function JobBanner({ job }: { job: JobView }) {
       ? 'Reading the text for words worth training'
       : job.kind === 'generate'
         ? 'Writing the questions'
-        : 'Reading the page';
+        : job.kind === 'enrich'
+          ? 'Writing the definitions and examples'
+          : 'Reading the page';
 
   const pct = job.total > 0 ? Math.round((job.progress / job.total) * 100) : null;
 
@@ -387,10 +419,12 @@ function WordsStep({
   job: JobView | null;
 }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRepeats, setShowRepeats] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
 
   const words = useQuery({
     queryKey: ['admin', 'words', test.id],
@@ -428,11 +462,11 @@ function WordsStep({
     onSuccess: invalidate,
   });
 
-  const extract = async () => {
+  const startJob = (path: string, body: unknown) => async () => {
     setError(null);
     setBusy('Starting…');
     try {
-      await api.post<{ jobId: string }>(admin(`/tests/${test.id}/extract-words`), { level: 'B1' });
+      await api.post<{ jobId: string }>(admin(`/tests/${test.id}/${path}`), body);
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -441,8 +475,12 @@ function WordsStep({
     }
   };
 
+  const extract = startJob('extract-words', { level: 'B1' });
+  const enrich = startJob('enrich-words', {});
+
   const list = words.data ?? [];
   const included = list.filter((w) => w.included);
+  const sheetReady = included.filter((w) => w.definitionEn && w.contextSentence).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -450,6 +488,11 @@ function WordsStep({
         {aiReady ? (
           <Button variant="primary" onClick={extract} disabled={Boolean(busy) || Boolean(job)}>
             Find the words in the text
+          </Button>
+        ) : null}
+        {aiReady && included.length > 0 ? (
+          <Button onClick={enrich} disabled={Boolean(busy) || Boolean(job)}>
+            Write the missing definitions
           </Button>
         ) : null}
         <Button onClick={() => setShowRepeats((v) => !v)}>Words from an earlier test</Button>
@@ -511,7 +554,15 @@ function WordsStep({
 
           <Rows>
             {list.map((word) => (
-              <Row key={word.id} className={cx(!word.included && 'opacity-40')}>
+              <Row
+                key={word.id}
+                className={cx(!word.included && 'opacity-40')}
+                detail={
+                  open === word.id ? (
+                    <WordSheetFields test={test} word={word} onSaved={invalidate} />
+                  ) : null
+                }
+              >
                 <input
                   type="checkbox"
                   checked={word.included}
@@ -520,8 +571,24 @@ function WordsStep({
                   aria-label={`Include ${word.headwordEn}`}
                 />
                 <span className="tabular w-6 text-sm text-ink-60">{word.difficulty}</span>
-                <span className="min-w-32 flex-1 text-lg">{word.headwordEn}</span>
+                <button
+                  type="button"
+                  onClick={() => setOpen((id) => (id === word.id ? null : word.id))}
+                  className="min-w-32 flex-1 text-left text-lg hover:underline"
+                  aria-expanded={open === word.id}
+                >
+                  {word.headwordEn}
+                </button>
                 <span className="min-w-32 flex-1 text-lg text-ink-60">{word.translationDe}</span>
+                {/* Plain text, not a colour: the accent is rationed, and this is
+                    a note about completeness rather than something to act on. */}
+                <span className="w-20 shrink-0 text-right text-xs text-ink-40">
+                  {word.definitionEn && word.contextSentence
+                    ? 'on the sheet'
+                    : word.definitionEn || word.contextSentence
+                      ? 'half done'
+                      : ''}
+                </span>
                 {word.origin === 'repeat' ? <Status tone="quiet">repeat</Status> : null}
                 {/* Settable by hand: without a model, nothing else flags a trap. */}
                 <button
@@ -550,15 +617,94 @@ function WordsStep({
             Multiple choice goes to words that are hard (7 and above) or marked as a trap —
             anywhere else it would just be a free guess. Tap “trap” to mark a false friend.
           </p>
+          <p className="text-sm text-ink-60">
+            <strong className="text-ink">{sheetReady}</strong> of {included.length} are ready for
+            the worksheet — tap a word to write its definition and example yourself.
+          </p>
         </>
       )}
     </div>
   );
 }
 
+/**
+ * The two fields the printed sheet needs. Saved on blur rather than with a
+ * button: a teacher correcting a list of thirty is tabbing through it, and a
+ * Save next to every field would be thirty things not to forget.
+ */
+function WordSheetFields({
+  test,
+  word,
+  onSaved,
+}: {
+  test: TestView;
+  word: WordView;
+  onSaved: () => void;
+}) {
+  const [definition, setDefinition] = useState(word.definitionEn ?? '');
+  const [example, setExample] = useState(word.contextSentence ?? '');
+
+  const save = useMutation({
+    mutationFn: (body: { definitionEn?: string; contextSentence?: string }) =>
+      api.patch(admin(`/tests/${test.id}/words/${word.id}`), body),
+    onSuccess: onSaved,
+  });
+
+  return (
+    <div className="flex flex-col gap-4 pl-10">
+      <Field
+        label="Definition, in English"
+        hint="Plain English, and without using the word itself — otherwise the sheet gives the answer away."
+      >
+        <Input
+          value={definition}
+          onChange={(e) => setDefinition(e.target.value)}
+          onBlur={() =>
+            definition !== (word.definitionEn ?? '') && save.mutate({ definitionEn: definition })
+          }
+          placeholder={`what “${word.headwordEn}” means, in other words`}
+        />
+      </Field>
+      <Field label="Example sentence" hint="One sentence that uses the word, so its meaning is visible.">
+        <Input
+          value={example}
+          onChange={(e) => setExample(e.target.value)}
+          onBlur={() =>
+            example !== (word.contextSentence ?? '') && save.mutate({ contextSentence: example })
+          }
+          placeholder={`a sentence with “${word.headwordEn}” in it`}
+        />
+      </Field>
+    </div>
+  );
+}
+
+/**
+ * Words coming back from earlier units.
+ *
+ * Leads with what is due, because spacing is the point and a teacher should not
+ * have to remember which unit a word was last in. Browsing one particular unit
+ * stays underneath, for when they already know what they are after.
+ *
+ * Nothing is carried over until it is ticked. The suggestion is offered afresh
+ * for every test, so leaving it alone is always a valid answer.
+ */
 function RepeatPicker({ test, onImported }: { test: TestView; onImported: () => void }) {
   const [sourceId, setSourceId] = useState<string>('');
   const [picked, setPicked] = useState<Set<string>>(new Set());
+
+  const dueWords = useQuery({
+    queryKey: ['admin', 'due-words', test.id],
+    queryFn: () => api.get<DueWord[]>(admin(`/tests/${test.id}/due-words`)),
+  });
+
+  const toggle = (wordId: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(wordId)) next.delete(wordId);
+      else next.add(wordId);
+      return next;
+    });
 
   const sources = useQuery({
     queryKey: ['admin', 'repeat-sources', test.id],
@@ -578,20 +724,63 @@ function RepeatPicker({ test, onImported }: { test: TestView; onImported: () => 
   });
 
   const importWords = useMutation({
+    // No source test: a pick can span several units at once.
     mutationFn: () =>
-      api.post(admin(`/tests/${test.id}/import-words`), {
-        fromTestId: sourceId,
-        wordIds: [...picked],
-      }),
+      api.post(admin(`/tests/${test.id}/import-words`), { wordIds: [...picked] }),
     onSuccess: () => {
       setPicked(new Set());
+      void dueWords.refetch();
       onImported();
     },
   });
 
+  const due = dueWords.data ?? [];
+  const overdue = due.filter((word) => word.dueInDays <= 0);
+
   return (
-    <div className="rule-t rule-b flex flex-col gap-6 py-8">
-      <Field label="Take words from">
+    <div className="rule-t rule-b flex flex-col gap-8 py-8">
+      <div className="flex flex-col gap-4">
+        <span className="label">Due to come round again</span>
+        {dueWords.isLoading ? (
+          <Spinner />
+        ) : overdue.length === 0 ? (
+          <p className="text-sm text-ink-60">
+            {due.length === 0
+              ? 'Nothing yet — words appear here once a test that had them has been closed.'
+              : 'Nothing is due. The class saw these recently enough that asking again would be early.'}
+          </p>
+        ) : (
+          <>
+            <p className="max-w-prose text-sm text-ink-60">
+              Words the class met in an earlier unit, longest overdue first. Spacing them out is
+              what makes them stick — but nothing is added unless you tick it.
+            </p>
+            <ul className="max-h-80 overflow-y-auto">
+              {overdue.map((word) => (
+                <li key={word.wordId} className="rule-t flex flex-wrap items-center gap-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={picked.has(word.wordId)}
+                    onChange={() => toggle(word.wordId)}
+                    className="size-5 accent-[var(--color-accent)]"
+                    aria-label={`Bring back ${word.headwordEn}`}
+                  />
+                  <span className="min-w-28 flex-1 text-lg">{word.headwordEn}</span>
+                  <span className="min-w-28 flex-1 text-sm text-ink-60">{word.translationDe}</span>
+                  <span className="text-sm text-ink-40">
+                    {word.fromTestTitle} · {word.daysSince} days ago
+                  </span>
+                  <span className="tabular w-24 shrink-0 text-right text-sm text-ink-60">
+                    {word.correctRate === null ? 'not reached' : `${word.correctRate}% right`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+
+      <Field label="Or take words from one particular test">
         <Select value={sourceId} onChange={(e) => setSourceId((e.target as HTMLSelectElement).value)}>
           <option value="">Choose an earlier test…</option>
           {sources.data?.map((s) => (
@@ -636,15 +825,17 @@ function RepeatPicker({ test, onImported }: { test: TestView; onImported: () => 
               </li>
             ))}
           </ul>
-          <Button
-            variant="primary"
-            disabled={picked.size === 0 || importWords.isPending}
-            onClick={() => importWords.mutate()}
-          >
-            Add {picked.size} word{picked.size === 1 ? '' : 's'}
-          </Button>
         </>
       ) : null}
+
+      {/* One button for both lists, since a pick may span several units. */}
+      <Button
+        variant="primary"
+        disabled={picked.size === 0 || importWords.isPending}
+        onClick={() => importWords.mutate()}
+      >
+        Add {picked.size} word{picked.size === 1 ? '' : 's'}
+      </Button>
     </div>
   );
 }
@@ -984,7 +1175,79 @@ function MixReport({ report }: { report: AchievedMix }) {
 }
 
 // ---------------------------------------------------------------------------
-// 5 — opening it
+// 6 — the week before: revising
+// ---------------------------------------------------------------------------
+
+/**
+ * Publishing, and seeing what publishing gives the class.
+ *
+ * The preview runs the same component the students do, against the same builder
+ * and the same marker — a preview that could disagree with the real thing would
+ * be worse than none, because it would be believed.
+ */
+function PractiseStep({
+  test,
+  onAction,
+  pending,
+}: {
+  test: TestView;
+  onAction: (action: 'publish' | 'unpublish' | 'open' | 'close') => void;
+  pending: boolean;
+}) {
+  const [previewing, setPreviewing] = useState(false);
+  const live = test.status === 'published' || test.status === 'closed';
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="rule-t rule-b flex flex-col gap-4 py-8">
+        <span className="label">{live ? 'Your class can revise' : 'Not shared yet'}</span>
+        <p className="max-w-prose text-lg">
+          {live
+            ? 'They see the word list and can practise it as often as they like — the pairs, not the questions from the test.'
+            : 'Publish the word list and it appears on every student’s screen, with a Practise button. Their marks are not affected either way.'}
+        </p>
+        <p className="max-w-prose text-sm text-ink-40">
+          Practising records nothing. You are not told who revised, or how it went — it is there to
+          be used without it counting.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        {test.status === 'draft' ? (
+          <Button variant="primary" onClick={() => onAction('publish')} disabled={pending}>
+            Publish the word list
+          </Button>
+        ) : null}
+        {test.status === 'published' ? (
+          <Button onClick={() => onAction('unpublish')} disabled={pending}>
+            Take it back
+          </Button>
+        ) : null}
+        <Button onClick={() => setPreviewing((v) => !v)}>
+          {previewing ? 'Hide the preview' : 'Try it as they see it'}
+        </Button>
+      </div>
+
+      {previewing ? (
+        <div className="rule-t flex min-h-[32rem] flex-col pt-6">
+          <Drill
+            path={admin(`/tests/${test.id}/drill`)}
+            queryKey={['admin', 'drill', test.id]}
+            heading={<span className="label">Preview · nothing is recorded</span>}
+            action={
+              <Button size="sm" variant="quiet" onClick={() => setPreviewing(false)}>
+                Done
+              </Button>
+            }
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 7 — opening it
 // ---------------------------------------------------------------------------
 
 function OpenStep({
@@ -1013,16 +1276,8 @@ function OpenStep({
       </div>
 
       <div className="flex flex-wrap gap-3">
-        {test.status === 'draft' ? (
-          <Button onClick={() => onAction('publish')} disabled={pending}>
-            Publish the word list
-          </Button>
-        ) : null}
-        {test.status === 'published' ? (
-          <Button onClick={() => onAction('unpublish')} disabled={pending}>
-            Unpublish
-          </Button>
-        ) : null}
+        {/* Publishing lives in Practise now: it starts the revising, which is a
+            week's worth of work, not part of the five minutes. */}
         {test.status !== 'open' ? (
           <Button variant="primary" size="lg" onClick={() => onAction('open')} disabled={pending}>
             Open the test

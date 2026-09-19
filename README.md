@@ -88,6 +88,29 @@ The source text understands light markdown — `#` headings, `**bold**`,
 tapping one for its translation and dictionary form. Formatting and highlights
 compose, so a word can be bold and trained at once.
 
+When a test is being built, voku offers the words from earlier units that are
+**due to come round again** — on a widening schedule, pulled sooner when the
+class struggled with a word. Spreading repetitions out is one of the two
+best-evidenced things that make vocabulary stick. It is judged for the class
+rather than for individual students, and it only ever suggests: nothing is
+carried over unless the teacher ticks it. A word that comes back is labelled
+*from Unit 3* wherever students meet it.
+
+Each student also sees their own **words to work on** — the words they got
+wrong in a test and have not got right since, across every unit — and can
+practise them. It is built from answers already kept, counts only closed tests
+and questions they reached, and is never shown to the teacher. A word leaves the
+list when it is got right in a later test.
+
+Once a test is published, students can **practise** from their study list: the
+word pairs, as often as they like. A missed word comes back a few cards later —
+first as a choice built from the other words on the list, then to type again —
+and only counts as known once it has been typed. It drills the pairs and never
+the test's own
+questions — those are identical for everyone and in a fixed order, so rehearsing
+them would measure repetition rather than knowledge. Nothing about practice is
+stored or reported.
+
 After a test, the results board shows **which words the class did not know**,
 with what students wrote instead. Rates count only students who reached the
 question, since in a sprint most never see the last few.
@@ -115,6 +138,20 @@ the word list lets you mark a trap by hand when no model is connected.
 The teacher's format mix is a set of **preferences, not quotas**. A text with
 three tricky words cannot support ten multiple-choice questions, and the review
 step reports the shortfall rather than inventing traps that are not there.
+
+### The worksheet
+
+Every word carries an English definition and an example sentence of its own, so
+the same list that becomes the test also prints as a sheet to revise from. Both
+fields can be written by hand; with a model connected, one button fills in
+whatever is still blank. It only fills blanks — a sentence taken from the source
+text, or anything you typed, is never written over.
+
+The sheet comes in four variants, and the variant decides what a student is
+allowed to see: everything, the German column left blank, the word missing from
+its own example, or just the pairs. That blanking happens once, when the sheet is
+built, so the printed page, the `.csv` and the `.docx` cannot disagree about it.
+Print from the browser, or download either file to finish in Excel or Word.
 
 ---
 

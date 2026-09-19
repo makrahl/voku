@@ -1,7 +1,8 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import {
   AcceptVariantSchema,
   CutoffSchema,
+  DrillAnswerSchema,
   ExtractRequestSchema,
   ImportWordsSchema,
   RegenerateQuestionSchema,
@@ -12,8 +13,15 @@ import {
   WordCreateSchema,
   WordPasteSchema,
   WordUpdateSchema,
+  WorksheetRequestSchema,
+  type DrillFeedback,
+  type DrillView,
   type QuestionType,
 } from '@voku/shared';
+import { buildWorksheet, toCsv, toDocx } from '../services/worksheet.js';
+import { drillChoice, drillItems, drillPayloads } from '../services/drill.js';
+import { dueWords } from '../services/revision.js';
+import { gradeAnswer } from '../services/grading.js';
 import { badRequest, conflict, notFound, param, parseBody, route } from '../http.js';
 import { requireTeacher } from '../middleware/auth.js';
 import { getClass } from '../services/roster.js';
@@ -38,7 +46,13 @@ import { acceptVariant, rejectedAnswers, repeatCandidates } from '../services/re
 import { testStats } from '../services/stats.js';
 import { activeJob, createJob, startJob } from '../services/jobs.js';
 import { getLlmConfig, isLlmConfigured } from '../services/settings.js';
-import { extractWords, generateWithLlm, regenerateOne, transcribeImages } from '../services/llm/compose.js';
+import {
+  enrichWords,
+  extractWords,
+  generateWithLlm,
+  regenerateOne,
+  transcribeImages,
+} from '../services/llm/compose.js';
 import { TranscribeSchema } from '../services/llm/schemas.js';
 import type { Db } from '../db/index.js';
 
@@ -222,6 +236,9 @@ testsRouter.patch(
     if (body.difficulty !== undefined) set('difficulty', 'difficulty', body.difficulty);
     if (body.trickiness !== undefined) set('trickiness', 'trickiness', body.trickiness);
     if (body.included !== undefined) set('included', 'included', body.included);
+    // Blanked out rather than left empty, so "no definition" is one state, not two.
+    if (body.definitionEn !== undefined) set('definition_en', 'definition', body.definitionEn || null);
+    if (body.contextSentence !== undefined) set('context_sentence', 'context', body.contextSentence || null);
 
     if (sets.length > 0) req.db.run(`UPDATE test_words SET ${sets.join(', ')} WHERE id = :id`, params);
     res.json(listWords(req.db, test.id).find((w) => w.id === word.id));
@@ -475,6 +492,119 @@ testsRouter.post(
   }),
 );
 
+// ---------------------------------------------------------------------------
+// Previewing the practice drill
+//
+// Deliberately without the students' `assertRevisable` guard: the point of the
+// preview is to see what a class would get *before* deciding to publish, and a
+// teacher looking at their own draft reveals nothing to anyone.
+// ---------------------------------------------------------------------------
+
+testsRouter.get(
+  '/:id/drill',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    res.json({ title: test.title, items: drillItems(req.db, test) } satisfies DrillView);
+  }),
+);
+
+testsRouter.get(
+  '/:id/drill/:wordId/choice',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    const choice = drillChoice(req.db, test, param(req, 'wordId'));
+    if (!choice) throw notFound('No such word in this test');
+    res.json(choice);
+  }),
+);
+
+testsRouter.post(
+  '/:id/drill',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    const { wordId, given } = parseBody(DrillAnswerSchema, req.body);
+
+    const payload = drillPayloads(req.db, test).get(wordId);
+    if (!payload) throw notFound('No such word in this test');
+
+    const grade = gradeAnswer(payload, given);
+    res.json({
+      correct: grade.correct,
+      almost: grade.almost,
+      correctAnswer: grade.correctAnswer,
+    } satisfies DrillFeedback);
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// The printed worksheet
+// ---------------------------------------------------------------------------
+
+function worksheetFor(req: Request, testId: string) {
+  const test = getTestRow(req.db, req.teacher!.id, testId);
+  const { variant } = parseBody(WorksheetRequestSchema, req.query);
+  const cls = req.db.get<{ name: string }>('SELECT name FROM classes WHERE id = :id', {
+    id: test.class_id,
+  });
+  return { test, view: buildWorksheet(req.db, test, cls?.name ?? '', variant) };
+}
+
+/** A filename the teacher can find again in a folder of thirty downloads. */
+function worksheetFilename(title: string, variant: string, extension: string): string {
+  const stem = title.trim().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'worksheet';
+  return `${stem}-${variant}.${extension}`;
+}
+
+testsRouter.get(
+  '/:id/worksheet',
+  route((req, res) => {
+    res.json(worksheetFor(req, param(req, 'id')).view);
+  }),
+);
+
+testsRouter.get(
+  '/:id/worksheet.csv',
+  route((req, res) => {
+    const { view } = worksheetFor(req, param(req, 'id'));
+    res.setHeader('content-type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'content-disposition',
+      `attachment; filename="${worksheetFilename(view.title, view.variant, 'csv')}"`,
+    );
+    res.send(toCsv(view));
+  }),
+);
+
+testsRouter.get(
+  '/:id/worksheet.docx',
+  route(async (req, res) => {
+    const { view } = worksheetFor(req, param(req, 'id'));
+    res.setHeader(
+      'content-type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader(
+      'content-disposition',
+      `attachment; filename="${worksheetFilename(view.title, view.variant, 'docx')}"`,
+    );
+    res.send(await toDocx(view));
+  }),
+);
+
+/** Fills in the definition and example the printed worksheet needs. */
+testsRouter.post(
+  '/:id/enrich-words',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    assertEditable(test);
+    requireLlm(req.db);
+
+    const jobId = createJob(req.db, 'enrich', test.id, 0);
+    startJob(req.db, jobId, (report) => enrichWords(req.db, getLlmConfig(req.db), test, report));
+    res.status(202).json({ jobId });
+  }),
+);
+
 testsRouter.post(
   '/:id/generate-questions',
   route((req, res) => {
@@ -571,6 +701,20 @@ testsRouter.get(
   }),
 );
 
+/**
+ * Words from earlier units that are due to come round again.
+ *
+ * A suggestion and nothing more — the teacher decides per test whether to take
+ * any of them. Nothing is carried over automatically.
+ */
+testsRouter.get(
+  '/:id/due-words',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    res.json(dueWords(req.db, test.class_id, test.id));
+  }),
+);
+
 testsRouter.get(
   '/:id/repeat-candidates',
   route((req, res) => {
@@ -589,17 +733,25 @@ testsRouter.post(
     const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
     assertEditable(test);
     const { fromTestId, wordIds } = parseBody(ImportWordsSchema, req.body);
-    const source = getTestRow(req.db, req.teacher!.id, fromTestId);
 
     const placeholders = wordIds.map((_, i) => `:w${i}`).join(', ');
-    const params: Record<string, unknown> = { t: source.id };
+    const params: Record<string, unknown> = { class: test.class_id };
     wordIds.forEach((id, i) => (params[`w${i}`] = id));
 
+    // Scoped to this teacher's own class rather than to one named test: the due
+    // list draws from every earlier unit at once, so a single pick can span
+    // several of them. Without `fromTestId` the source is read off each word.
+    if (fromTestId) params.source = fromTestId;
     const rows = req.db.all<WordRow>(
-      `SELECT * FROM test_words WHERE test_id = :t AND id IN (${placeholders})`,
-      params,
+      `SELECT w.* FROM test_words w
+         JOIN tests t ON t.id = w.test_id
+        WHERE t.class_id = :class
+          AND t.id != :self
+          ${fromTestId ? 'AND t.id = :source' : ''}
+          AND w.id IN (${placeholders})`,
+      { ...params, self: test.id },
     );
-    if (rows.length === 0) throw notFound('None of those words are in that test');
+    if (rows.length === 0) throw notFound('None of those words are in an earlier test');
 
     const existing = new Set(
       req.db
@@ -623,11 +775,15 @@ testsRouter.post(
           trickinessKind: row.trickiness_kind,
           trickinessNote: row.trickiness_note,
           contextSentence: row.context_sentence,
+          definitionEn: row.definition_en,
           acceptedEn: JSON.parse(row.accepted_en_json) as string[],
           acceptedDe: JSON.parse(row.accepted_de_json) as string[],
           suitsFillBlank: row.suits_fill_blank === 1,
           suitsDefinitionMcq: row.suits_definition_mcq === 1,
           origin: 'repeat',
+          // Where it came back from, so the class can be told which unit.
+          // A word repeated twice points at the unit it was last seen in.
+          repeatedFrom: row.test_id,
         })),
     );
 

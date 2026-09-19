@@ -296,6 +296,28 @@ describe('carrying words into the next test', () => {
     expect(result.res.body.added.every((w: { origin: string }) => w.origin === 'repeat')).toBe(true);
   });
 
+  // A repeated word keeps its definition, so the model is not paid twice for
+  // prose that has already been written and checked.
+  it('carries a definition over with the word instead of asking for it again', async () => {
+    const qs = await questions();
+
+    const added = await asTeacher(async () => {
+      await server.post(`/api/admin/tests/${testId}/close`);
+      await server.patch(`/api/admin/tests/${testId}/words/${qs[0].wordId}`, {
+        definitionEn: 'a short explanation',
+      });
+      const next = (await server.post('/api/admin/tests', { classId, title: 'Unit 4' })).body.id;
+      return (
+        await server.post(`/api/admin/tests/${next}/import-words`, {
+          fromTestId: testId,
+          wordIds: [qs[0].wordId],
+        })
+      ).body.added;
+    });
+
+    expect(added[0].definitionEn).toBe('a short explanation');
+  });
+
   it('does not import a word the new test already has', async () => {
     const qs = await questions();
 

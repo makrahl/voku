@@ -35,7 +35,11 @@ const TOPICS: Topic[] = [
     summary: 'From a text or a pasted word list, with or without the AI.',
     body: (
       <>
-        <p>The composer runs in five steps, and you can jump between them freely.</p>
+        <p>
+          The composer runs in seven steps, and you can jump between them freely. They follow the
+          order of the classroom rather than the order of the software: build it, hand out the
+          sheet, let them revise, then run the sprint.
+        </p>
         <dl className="flex flex-col gap-3">
           <Step n="01" name="Text">
             Paste the reading text the class is working on, or photograph a textbook page. You can
@@ -43,8 +47,8 @@ const TOPICS: Topic[] = [
           </Step>
           <Step n="02" name="Words">
             The words to be tested, with their translations. The AI can pull them out of the text,
-            or you can type and paste them yourself. <b>Words from an earlier test</b> brings back
-            vocabulary from previous units so it keeps getting revisited.
+            or you can type and paste them yourself. <b>Words from an earlier test</b> opens the
+            list of words that are <b>due to come round again</b> — see below.
           </Step>
           <Step n="03" name="Design">
             Minutes, target, direction, and the mix of question formats.
@@ -53,9 +57,17 @@ const TOPICS: Topic[] = [
             The actual questions. Read them before class — this is the step that catches a bad
             distractor or a translation you disagree with. Edit or delete anything that is wrong.
           </Step>
-          <Step n="05" name="Open">
-            Publish the word list to let students revise, then open the sprint when the lesson
-            starts.
+          <Step n="05" name="Worksheet">
+            The sheet to hand out, in four versions — to learn from, with the German left blank,
+            with the words missing from their own example sentences, or just the pairs. Print it,
+            or download it as a table or a Word file to finish in your own template.
+          </Step>
+          <Step n="06" name="Practise">
+            Publish the word list, which is what lets the class revise and practise. You can try
+            the practice yourself here first, exactly as they will see it.
+          </Step>
+          <Step n="07" name="Open">
+            Open the sprint when the lesson starts, and close it afterwards.
           </Step>
         </dl>
         <p>
@@ -111,13 +123,16 @@ const TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          <b>Publish the word list</b> a few days ahead. Students can then open it on their own
-          devices and revise, either reading the source text with the trained words highlighted, or
-          as a plain list. Tapping a word shows its translation.
+          <b>Publish the word list</b> a few days ahead, from the Practise step. Students can then
+          open it on their own devices and revise, either reading the source text with the trained
+          words highlighted, or as a plain list. Tapping a word shows its translation, and{' '}
+          <b>Practise</b> drills the pairs.
         </p>
         <p>
-          <b>Open the test</b> when the lesson starts. The word list disappears while the sprint is
-          running and comes back once you close it. Each student's clock starts when <i>they</i> tap
+          <b>Open the test</b> when the lesson starts. While it is open, every student’s word lists,
+          practice and reviews of earlier units are paused — a word brought back from an earlier
+          unit is also a question now, so an old list would show the answer. They come back the
+          moment you close the test. Each student's clock starts when <i>they</i> tap
           Start, so a latecomer still gets their full time, and a device with the wrong clock gains
           nothing — the server keeps time, not the iPad.
         </p>
@@ -180,20 +195,97 @@ const TOPICS: Topic[] = [
     ),
   },
   {
-    title: 'Practice, and what students see afterwards',
-    summary: 'Retaking a test for no marks, and reviewing the misses.',
+    title: 'Bringing words back from earlier units',
+    summary: 'What is due to be asked again, and why spacing it out is the point.',
     body: (
       <>
         <p>
-          When a student hands in, they see their percentage and a review of the questions they got
-          wrong, with the right answer next to what they wrote. Misses come first — that is the part
-          worth reading.
+          On the Words step, <b>Words from an earlier test</b> lists vocabulary the class met in a
+          unit you have already closed, longest overdue first. A word comes back roughly ten days
+          after its first outing, four weeks after the second and ten weeks after the third —
+          sooner if the class struggled with it, later if nearly all of them had it.
         </p>
         <p>
-          From there they can run the same test again as <b>practice</b>. Practice attempts are
-          never graded, never appear on your board and never affect the class statistics. It is
-          there so a student who scored 40% can go again on the bus home without it counting against
-          them.
+          Spreading repetitions out like this is one of the two best-evidenced things anyone can do
+          for long-term retention; cramming a word three times in one week and never again is the
+          opposite. The dates are judged for the <b>class</b>, not for individual students: working
+          out what one child is personally due would mean following them across months, and this
+          app deliberately stores nothing about a student but a first name and a score.
+        </p>
+        <p>
+          <b>Nothing is carried over unless you tick it.</b> The list is offered afresh for every
+          test and ignoring it entirely is a perfectly good answer — a unit that needs all-new
+          vocabulary should have all-new vocabulary.
+        </p>
+        <p>
+          Words that come back are labelled <i>from Unit 3</i> — on the study list, in practice, and
+          in a Revision column on the printed sheet — so students know which are revision. A label
+          rather than a colour: on their screen the accent colour already means “your answer was
+          right”, and colour rarely survives a school photocopier anyway.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: 'Each student’s own words to work on',
+    summary: 'What a student sees of their own mistakes, and what you do not.',
+    body: (
+      <>
+        <p>
+          On their home screen, every student sees <b>Words to work on</b>: the words they got
+          wrong in a test and have not got right since, gathered across all your units, with a
+          button to practise them.
+        </p>
+        <p>
+          Only their own answers from tests you have closed count, and only questions they
+          actually reached — not getting to word 35 is not the same as getting it wrong. Practice
+          runs do not count. A word leaves the list once they get it right in a later test, which
+          is where bringing words back from earlier units pays off twice. If you accept a spelling
+          in the regrade panel, it leaves their list too.
+        </p>
+        <p>
+          <b>You do not see these lists.</b> Nothing new is recorded to make them — the answers
+          were already kept for the review screen — and the class results already tell you which
+          words the class did not know. A per-child list of failures would be a different thing,
+          and not one this app keeps.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: 'Practice, and what students see afterwards',
+    summary: 'Revising beforehand, retaking afterwards, and reviewing the misses.',
+    body: (
+      <>
+        <p>
+          Once you publish a test, its word list appears on every student's screen with a{' '}
+          <b>Practise</b> button. That drills the word pairs as often as they like. A word they miss
+          comes back a few cards later rather than at the end — first as a choice of four, then to
+          type again, because recognising a word comes before producing it. It only counts as
+          known once it has been typed. The round ends with how many were right first time and a
+          second round of just the ones that needed another go.
+        </p>
+        <p>
+          It deliberately does <b>not</b> use the test's own questions. They would be the same
+          questions in the same order on the day, so practising them would measure how many times a
+          student clicked through rather than what they know — and a multiple-choice trap stops
+          working once the four options are familiar. Nothing about practice is recorded: you are
+          not told who revised, or how it went.
+        </p>
+        <p>
+          When a student hands in, they see their percentage straight away. The <b>review</b> — every
+          question with the right answer next to what they wrote, misses first — opens once you
+          close the test. Handed in early, it would be the whole answer key, unreached questions
+          included, in a room that is still writing. During the sprint itself each answer is still
+          followed by the right one, as before.
+        </p>
+        <p>
+          From there they get two things, and they are different on purpose.{' '}
+          <b>Practise the words</b> is the same word drill as before the test — that is the one
+          worth doing, because the words carry into the next unit and these questions do not.{' '}
+          <b>Try the questions again</b> re-runs this test, untimed. Neither is graded, neither
+          appears on your board, and neither touches the class statistics. A student who scored 40%
+          can go again on the bus home without it counting against them.
         </p>
         <p>
           During the sprint, a near-miss is marked wrong but flagged <b>Almost</b>, so a student who

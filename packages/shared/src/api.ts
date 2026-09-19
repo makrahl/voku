@@ -11,6 +11,7 @@ import {
 import {
   QuestionTypeSchema,
   TestDirectionSchema,
+  type QuestionDirection,
   type QuestionPayload,
   type QuestionType,
   type StudentQuestionPayload,
@@ -79,6 +80,9 @@ export const WordUpdateSchema = z.object({
   difficulty: z.number().int().min(1).max(10).optional(),
   trickiness: z.number().int().min(0).max(3).optional(),
   included: z.boolean().optional(),
+  /** Empty string clears the field — that is how the teacher rejects a bad one. */
+  definitionEn: z.string().trim().max(400).optional(),
+  contextSentence: z.string().trim().max(400).optional(),
 });
 
 export const WordCreateSchema = z.object({
@@ -88,6 +92,7 @@ export const WordCreateSchema = z.object({
   trickiness: z.number().int().min(0).max(3).default(0),
   trickinessKind: TrickinessKindSchema.default('none'),
   contextSentence: z.string().trim().optional(),
+  definitionEn: z.string().trim().optional(),
 });
 
 /** Keep the N most difficult included words, exclude the rest. */
@@ -95,8 +100,23 @@ export const CutoffSchema = z.object({
   keep: z.number().int().min(1),
 });
 
+/**
+ * What the printed sheet leaves for the student to supply.
+ *
+ * `full` is the sheet to learn from; the other three each remove one thing and
+ * ask for it back. The variant decides the content, not the file format, so all
+ * of them print, download as a table, and open in Word identically.
+ */
+export const WorksheetVariantSchema = z.enum(['full', 'no_german', 'gapped', 'compact']);
+export type WorksheetVariant = z.infer<typeof WorksheetVariantSchema>;
+
+export const WorksheetRequestSchema = z.object({
+  variant: WorksheetVariantSchema.default('full'),
+});
+
 export const ImportWordsSchema = z.object({
-  fromTestId: z.string().min(1),
+  /** Optional: the due list spans several earlier units, so words carry their own source. */
+  fromTestId: z.string().min(1).optional(),
   wordIds: z.array(z.string().min(1)).min(1),
 });
 
@@ -117,6 +137,11 @@ export const AnswerSubmitSchema = z.object({
 
 export const StudentSessionSchema = z.object({
   token: z.string().min(1),
+});
+
+export const DrillAnswerSchema = z.object({
+  wordId: z.string().min(1),
+  given: z.string(),
 });
 
 export const AcceptVariantSchema = z.object({
@@ -178,13 +203,39 @@ export interface WordView {
   trickinessKind: z.infer<typeof TrickinessKindSchema>;
   trickinessNote: string | null;
   contextSentence: string | null;
+  definitionEn: string | null;
   acceptedEn: string[];
   acceptedDe: string[];
   suitsFillBlank: boolean;
   suitsDefinitionMcq: boolean;
   included: boolean;
   origin: z.infer<typeof WordOriginSchema>;
+  /** Set when the word was carried over; null for a word first seen here. */
+  repeatedFrom: RepeatedFrom | null;
   rank: number;
+}
+
+/**
+ * One line of the printed sheet. Blanking has already happened, so every
+ * renderer — the print page, the CSV, the Word file — prints what it is given
+ * and cannot disagree with the others about what the student may see.
+ */
+export interface WorksheetRow {
+  word: string;
+  german: string;
+  definition: string;
+  example: string;
+  /** "from Unit 3" for a carried-over word, empty for a new one. */
+  from: string;
+}
+
+export interface WorksheetView {
+  title: string;
+  className: string;
+  variant: WorksheetVariant;
+  /** Columns to print, in order — a compact sheet has no definition column at all. */
+  columns: Array<keyof WorksheetRow>;
+  rows: WorksheetRow[];
 }
 
 /** Teacher-facing: includes the answer. */
@@ -203,6 +254,66 @@ export interface StudentQuestionView {
   index: number;
   total: number;
   payload: StudentQuestionPayload;
+}
+
+/**
+ * Practising the word list before the test.
+ *
+ * Deliberately not an attempt: nothing is stored, nothing is scored, and the
+ * teacher is never told who practised. It drills the word pairs rather than the
+ * test's own questions, so revising cannot become a rehearsal of the exact
+ * items — see the practice decision in CLAUDE.md.
+ */
+export interface DrillItem {
+  wordId: string;
+  prompt: string;
+  direction: QuestionDirection;
+  /** The unit this word came back from, shown as a quiet label. Null if new. */
+  repeatedFrom: string | null;
+}
+
+export interface DrillView {
+  title: string;
+  items: DrillItem[];
+}
+
+/** A word a student got wrong in a test and has not got right since. */
+export interface MyWord {
+  wordId: string;
+  headwordEn: string;
+  translationDe: string;
+  /** The unit where it was last missed. */
+  fromTestTitle: string;
+  timesMissed: number;
+}
+
+/** A student's own words to work on — shown to them, never to the teacher. */
+export interface MyWordsView {
+  words: MyWord[];
+  /** Words once missed and answered correctly in a test since. */
+  cleared: number;
+}
+
+/**
+ * The same word offered as a choice, for a second attempt after a miss.
+ *
+ * Built from the other words on the list, never from the test's own multiple
+ * choice — those carry the traps the model wrote, and seeing them in practice
+ * would spend them before the test.
+ */
+export interface DrillChoice {
+  wordId: string;
+  prompt: string;
+  direction: QuestionDirection;
+  /** Empty when the list is too short, or too full of synonyms, for a fair choice. */
+  options: string[];
+}
+
+export interface DrillFeedback {
+  correct: boolean;
+  /** Wrong by one letter — shows the right spelling without softening the mark. */
+  almost: boolean;
+  correctAnswer: string;
 }
 
 export interface AnswerFeedback {
@@ -229,6 +340,8 @@ export interface AttemptView {
   targetCount: number;
   percent: number;
   poolSize: number;
+  /** The answers can be gone through — only once the teacher has closed the test. */
+  reviewOpen: boolean;
 }
 
 export interface StudentHomeView {
@@ -237,6 +350,8 @@ export interface StudentHomeView {
   openTests: Array<{ id: string; title: string; durationSeconds: number; attemptId: string | null; submitted: boolean }>;
   studyLists: Array<{ id: string; title: string; wordCount: number }>;
   pastAttempts: Array<{ attemptId: string; testId: string; testTitle: string; percent: number; correctCount: number; targetCount: number; submittedAt: string }>;
+  /** A test in the class is running, so every list and practice is paused. */
+  revisionPaused: boolean;
 }
 
 export interface ResultRow {
@@ -263,6 +378,35 @@ export interface RejectedAnswerGroup {
   variant: string;
   count: number;
   studentNames: string[];
+}
+
+/**
+ * A word from an earlier unit that is due to come round again.
+ *
+ * `dueInDays` counts down to nought and then goes negative: -12 means twelve
+ * days past due. Judged for the class, never for one student — working out what
+ * one child is individually due would mean following them for months, and this
+ * app stores a first name and a score on purpose.
+ */
+export interface DueWord {
+  wordId: string;
+  headwordEn: string;
+  translationDe: string;
+  fromTestId: string;
+  fromTestTitle: string;
+  testedAt: string;
+  daysSince: number;
+  /** How many closed tests in this class have carried the word. */
+  timesTested: number;
+  /** Correct rate among the students who reached it last time; null if nobody did. */
+  correctRate: number | null;
+  dueInDays: number;
+}
+
+/** Where a repeated word came from, for the quiet "from Unit 3" label. */
+export interface RepeatedFrom {
+  testId: string;
+  title: string;
 }
 
 export interface RepeatCandidate {

@@ -132,6 +132,61 @@ Reply with:
 {"items":[{"headword":"","definition":"","distractors":["","",""]}]}`;
 }
 
+export const ENRICH_SYSTEM = `You write glossary entries for a printed vocabulary worksheet.
+${AUDIENCE}
+You reply with JSON only, no prose and no code fences.`;
+
+export function enrichUser(
+  items: Array<{
+    headword: string;
+    translationDe: string;
+    pos?: string | null;
+    context?: string | null;
+  }>,
+): string {
+  const list = items
+    .map(
+      (item, i) =>
+        `${i + 1}. "${item.headword}"${item.pos ? ` (${item.pos})` : ''} — German: ${item.translationDe}` +
+        `${item.context ? ` — appeared in: "${item.context}"` : ''}`,
+    )
+    .join('\n');
+
+  return `For each word below, write one English definition and one English example sentence.
+
+The sheet is studied at home, next to the German translation, so the two parts do different jobs.
+
+The definition is a dictionary entry, not a sentence about the word. Write the fragment that
+would follow the headword in a learner's dictionary: no "It is", no "A person", no "Something",
+no capital letter at the start and no full stop at the end.
+
+  "ambush"    -> "a surprise attack from a hidden position"
+  "thorough"  -> "done carefully, leaving nothing out"
+  "hesitate"  -> "to pause before doing something, because you are unsure"
+
+It must also:
+  - be plain English, simpler than the word being defined
+  - NOT contain the word itself, or any form of it — a student covering the German column
+    should still have to recall the word
+  - describe only that word, not the general topic
+
+The example sentence must:
+  - CONTAIN the word, in whatever form reads naturally — this one shows it in use
+  - make the meaning visible from the situation, not merely be grammatically possible
+  - be one sentence of about 8-16 words, at the level of a school textbook
+  - be about everyday life, not about language or vocabulary
+  - use the word in the same sense as the German translation given, not another sense
+
+If a sentence the word appeared in is given above, prefer it when it shows the meaning well;
+otherwise write a clearer one.
+
+WORDS:
+${list}
+
+Reply with:
+{"items":[{"headword":"","definition":"","example":""}]}`;
+}
+
 export const GAP_SYSTEM = `You write gap-fill sentences for vocabulary tests.
 ${AUDIENCE}
 You reply with JSON only, no prose and no code fences.`;

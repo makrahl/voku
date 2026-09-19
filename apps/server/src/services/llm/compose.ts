@@ -8,6 +8,7 @@ import {
   MixWeightsSchema,
   QuestionPayloadSchema,
   TranscriptionSchema,
+  WordEnrichmentBatchSchema,
   type AchievedMix,
   type CefrLevel,
   type QuestionPayload,
@@ -34,12 +35,14 @@ import { plainText } from '../annotate.js';
 import {
   DEFINITION_SYSTEM,
   DISTRACTOR_SYSTEM,
+  ENRICH_SYSTEM,
   EXTRACT_SYSTEM,
   GAP_SYSTEM,
   TRANSCRIBE_SYSTEM,
   TRANSCRIBE_USER,
   definitionUser,
   distractorUser,
+  enrichUser,
   extractUser,
   gapUser,
 } from './prompts.js';
@@ -149,6 +152,92 @@ export async function extractWords(
   );
 
   return { added: added.length };
+}
+
+// ---------------------------------------------------------------------------
+// Worksheet enrichment — fill the gaps in the printed sheet
+// ---------------------------------------------------------------------------
+
+/**
+ * Writes a definition and an example sentence for every included word that is
+ * missing one.
+ *
+ * Only the empty field is written. A context sentence lifted from the source
+ * text is the teacher's own material and shows the word where the class met it,
+ * so an invented sentence must never displace it. Re-running therefore costs
+ * only the words that are still bare, and a definition the teacher has edited
+ * survives.
+ */
+export async function enrichWords(
+  db: Db,
+  config: LlmConfig,
+  test: TestRow,
+  report: JobReporter,
+): Promise<{ filled: number; skipped: number }> {
+  const words = includedWords(db, test.id);
+  const bare = words.filter((w) => !w.definition_en || !w.context_sentence);
+
+  report.setTotal(batch(bare, BATCH_SIZE).length);
+  if (bare.length === 0) return { filled: 0, skipped: words.length };
+
+  let filled = 0;
+
+  await mapWithLimit(batch(bare, BATCH_SIZE), CONCURRENCY, async (chunk) => {
+    const result = await chatJson(config, {
+      system: ENRICH_SYSTEM,
+      user: enrichUser(
+        chunk.map((w) => ({
+          headword: w.headword_en,
+          translationDe: w.translation_de,
+          pos: w.pos,
+          context: w.context_sentence,
+        })),
+      ),
+      schema: WordEnrichmentBatchSchema,
+    });
+    const found = new Map(result.items.map((i) => [i.headword.toLowerCase(), i]));
+
+    for (const word of chunk) {
+      const item = found.get(word.headword_en.toLowerCase());
+      if (!item) continue;
+
+      const sets: string[] = [];
+      const params: Record<string, unknown> = { id: word.id };
+
+      // A definition that spells out the word answers its own question.
+      if (!word.definition_en && !leaksHeadword(item.definition, word.headword_en)) {
+        sets.push('definition_en = :definition');
+        params.definition = item.definition;
+      }
+      // The mirror image: an example that never uses the word is not an example.
+      if (!word.context_sentence && containsHeadword(item.example, word.headword_en)) {
+        sets.push('context_sentence = :example');
+        params.example = item.example;
+      }
+
+      if (sets.length > 0) {
+        db.run(`UPDATE test_words SET ${sets.join(', ')} WHERE id = :id`, params);
+        filled += 1;
+      }
+    }
+    report.advance();
+  });
+
+  return { filled, skipped: words.length - bare.length };
+}
+
+/** Matches the word and its inflections, so "reluctantly" counts as leaking "reluctant". */
+function headwordPattern(headword: string): RegExp {
+  const escaped = headword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${escaped}`, 'i');
+}
+
+function leaksHeadword(definition: string, headword: string): boolean {
+  return headwordPattern(headword).test(definition);
+}
+
+function containsHeadword(example: string, headword: string): boolean {
+  return headwordPattern(headword).test(example);
 }
 
 // ---------------------------------------------------------------------------

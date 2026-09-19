@@ -158,10 +158,28 @@ export const TranscriptionSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Worksheet enrichment — a definition and a worked example for every word
+//
+// Separate from the question passes above, because it runs over the whole list
+// rather than the subset that drew a given format, and because it also has to
+// serve words that were pasted rather than extracted from a text.
+// ---------------------------------------------------------------------------
+
+export const WordEnrichmentSchema = z.object({
+  headword: z.string().trim().min(1),
+  definition: z.string().trim().min(1),
+  /** Contains the word, unlike a gap sentence — the sheet shows it in use. */
+  example: z.string().trim().min(1),
+});
+export const WordEnrichmentBatchSchema = z.object({
+  items: z.array(WordEnrichmentSchema),
+});
+
+// ---------------------------------------------------------------------------
 // Jobs
 // ---------------------------------------------------------------------------
 
-export const JobKindSchema = z.enum(['transcribe', 'extract', 'generate']);
+export const JobKindSchema = z.enum(['transcribe', 'extract', 'generate', 'enrich']);
 export type JobKind = z.infer<typeof JobKindSchema>;
 
 export const JobStatusSchema = z.enum(['queued', 'running', 'done', 'error']);

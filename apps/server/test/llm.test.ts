@@ -233,6 +233,100 @@ describe('pass 1 — extracting words', () => {
   });
 });
 
+describe('filling in the worksheet', () => {
+  async function words() {
+    return (await server.get(`/api/admin/tests/${testId}/words`)).body as Array<{
+      id: string;
+      headwordEn: string;
+      definitionEn: string | null;
+      contextSentence: string | null;
+    }>;
+  }
+
+  it('writes a definition for every word, not just the ones that drew a definition question', async () => {
+    await awaitJob((await server.post(`/api/admin/tests/${testId}/extract-words`, {})).body.jobId);
+    const job = await awaitJob(
+      (await server.post(`/api/admin/tests/${testId}/enrich-words`, {})).body.jobId,
+    );
+
+    expect(job.status).toBe('done');
+    expect(job.result.filled).toBe(3);
+    expect((await words()).every((w) => w.definitionEn)).toBe(true);
+  });
+
+  // The sentence the word appeared in is the teacher's own material and shows
+  // the class where they met it. An invented one must not push it out.
+  it('keeps the sentence from the source text instead of inventing one over it', async () => {
+    await awaitJob((await server.post(`/api/admin/tests/${testId}/extract-words`, {})).body.jobId);
+    await awaitJob((await server.post(`/api/admin/tests/${testId}/enrich-words`, {})).body.jobId);
+
+    const reluctant = (await words()).find((w) => w.headwordEn === 'reluctant')!;
+    expect(reluctant.contextSentence).toBe('She was reluctant to answer.');
+  });
+
+  it('writes an example for a pasted word, which has no sentence to start from', async () => {
+    await server.post(`/api/admin/tests/${testId}/words/paste`, { text: 'thorough;gründlich' });
+    await awaitJob((await server.post(`/api/admin/tests/${testId}/enrich-words`, {})).body.jobId);
+
+    const thorough = (await words()).find((w) => w.headwordEn === 'thorough')!;
+    expect(thorough.contextSentence).toContain('thorough');
+  });
+
+  it('leaves a definition the teacher wrote alone', async () => {
+    await server.post(`/api/admin/tests/${testId}/words/paste`, { text: 'thorough;gründlich' });
+    const word = (await words())[0]!;
+    await server.patch(`/api/admin/tests/${testId}/words/${word.id}`, { definitionEn: 'mine' });
+
+    await awaitJob((await server.post(`/api/admin/tests/${testId}/enrich-words`, {})).body.jobId);
+    expect((await words())[0]!.definitionEn).toBe('mine');
+  });
+
+  it('refuses a definition that spells out the word it defines', async () => {
+    await server.post(`/api/admin/tests/${testId}/words/paste`, { text: 'thorough;gründlich' });
+    llm.enqueue(
+      JSON.stringify({
+        items: [
+          { headword: 'thorough', definition: 'being thorough about a job', example: 'He is thorough.' },
+        ],
+      }),
+    );
+    await awaitJob((await server.post(`/api/admin/tests/${testId}/enrich-words`, {})).body.jobId);
+
+    const thorough = (await words())[0]!;
+    expect(thorough.definitionEn).toBeNull();
+    // The example was fine, so it is kept even though the definition was not.
+    expect(thorough.contextSentence).toBe('He is thorough.');
+  });
+
+  it('refuses an example that never uses the word', async () => {
+    await server.post(`/api/admin/tests/${testId}/words/paste`, { text: 'thorough;gründlich' });
+    llm.enqueue(
+      JSON.stringify({
+        items: [
+          { headword: 'thorough', definition: 'done carefully and completely', example: 'She did it well.' },
+        ],
+      }),
+    );
+    await awaitJob((await server.post(`/api/admin/tests/${testId}/enrich-words`, {})).body.jobId);
+
+    const thorough = (await words())[0]!;
+    expect(thorough.definitionEn).toBe('done carefully and completely');
+    expect(thorough.contextSentence).toBeNull();
+  });
+
+  it('costs nothing on a second run when nothing is missing', async () => {
+    await awaitJob((await server.post(`/api/admin/tests/${testId}/extract-words`, {})).body.jobId);
+    await awaitJob((await server.post(`/api/admin/tests/${testId}/enrich-words`, {})).body.jobId);
+
+    const before = llm.requests.length;
+    const again = await awaitJob(
+      (await server.post(`/api/admin/tests/${testId}/enrich-words`, {})).body.jobId,
+    );
+    expect(again.result).toMatchObject({ filled: 0, skipped: 3 });
+    expect(llm.requests.length).toBe(before);
+  });
+});
+
 describe('pass 2 — writing questions', () => {
   beforeEach(async () => {
     await awaitJob((await server.post(`/api/admin/tests/${testId}/extract-words`, {})).body.jobId);

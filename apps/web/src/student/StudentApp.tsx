@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AnswerFeedback,
   AttemptView,
+  MyWordsView,
   QuestionPayload,
   StudentHomeView,
   StudentQuestionView,
@@ -11,6 +12,7 @@ import type {
 import { ApiError, api, student } from '../lib/api.ts';
 import { Button, Empty, Rows, Row, Spinner, Status, Wordmark, cx } from '../components/ui.tsx';
 import { StudyText, type Block } from './StudyText.tsx';
+import { Drill } from '../components/Drill.tsx';
 import {
   Countdown,
   FeedbackFlash,
@@ -114,6 +116,15 @@ function Home() {
     refetchInterval: 5000,
   });
 
+  // Not polled like the rest of home: it only changes when a test closes. Held
+  // back while one runs, so that the moment it closes — which is exactly when
+  // new misses arrive — becoming enabled fetches the list afresh.
+  const myWords = useQuery({
+    queryKey: ['student', 'my-words'],
+    queryFn: () => api.get<MyWordsView>(student('/my-words')),
+    enabled: data ? !data.revisionPaused : false,
+  });
+
   if (isLoading) return <Centred><Spinner /></Centred>;
   if (error) {
     return (
@@ -124,6 +135,11 @@ function Home() {
     );
   }
   if (!data) return null;
+
+  // One accent button on the page, for whatever matters most right now. The
+  // accent is rationed; three of them in a column stop meaning "this one".
+  const testRunning = data.openTests.length > 0;
+  const hasOwnWords = (myWords.data?.words.length ?? 0) > 0;
 
   return (
     <Screen>
@@ -164,7 +180,18 @@ function Home() {
           )}
         </section>
 
-        {data.studyLists.length > 0 ? (
+        {/* While any test in the class runs, home is the test and nothing else.
+            A word brought back from an earlier unit is also a question now, so
+            an earlier list would be the answers on screen — the server refuses
+            them too; this only saves a student tapping into a closed door. */}
+        {data.revisionPaused ? (
+          <p className="max-w-prose text-ink-60">
+            Word lists and practice are paused while a test is running. They come back as soon as
+            it closes.
+          </p>
+        ) : null}
+
+        {!data.revisionPaused && data.studyLists.length > 0 ? (
           <section className="flex flex-col gap-6">
             <span className="label">Words to learn</span>
             <Rows>
@@ -172,13 +199,28 @@ function Home() {
                 <Row key={list.id} onClick={() => navigate(`/s/tests/${list.id}/words`)}>
                   <span className="flex-1 text-xl">{list.title}</span>
                   <span className="text-sm text-ink-40">{list.wordCount} words</span>
+                  {/* One tap from the front door, but never the accent: there can
+                      be several lists, and none of them is more urgent than the
+                      others. */}
+                  <Button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      navigate(`/s/tests/${list.id}/drill`);
+                    }}
+                  >
+                    Practise
+                  </Button>
                 </Row>
               ))}
             </Rows>
           </section>
         ) : null}
 
-        {data.pastAttempts.length > 0 ? (
+        {!data.revisionPaused && myWords.data ? (
+          <MyWordsSection data={myWords.data} primary={!testRunning && hasOwnWords} />
+        ) : null}
+
+        {!data.revisionPaused && data.pastAttempts.length > 0 ? (
           <section className="flex flex-col gap-6">
             <span className="label">Finished</span>
             <Rows>
@@ -202,6 +244,102 @@ function Home() {
   );
 }
 
+/** How many of the student's own words to show on the home screen before "and N more". */
+const MY_WORDS_SHOWN = 5;
+
+/**
+ * The student's own words to work on — theirs alone; the teacher has no view of
+ * it. Framed as work to do rather than a record of failure, and it says how the
+ * list empties, because a list that only ever grows would be a reason to stop
+ * looking at it.
+ */
+function MyWordsSection({
+  data,
+  primary,
+}: {
+  data: MyWordsView;
+  /** The page's one accent button — unless a test is open, which outranks it. */
+  primary: boolean;
+}) {
+  const navigate = useNavigate();
+
+  if (data.words.length === 0 && data.cleared === 0) return null;
+  const more = data.words.length - MY_WORDS_SHOWN;
+
+  return (
+    <section className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-4">
+        <span className="label">Words to work on</span>
+        {data.words.length > 0 ? (
+          <Button
+            variant={primary ? 'primary' : 'secondary'}
+            onClick={() => navigate('/s/my-words/drill')}
+          >
+            Practise them
+          </Button>
+        ) : null}
+      </div>
+
+      {data.words.length === 0 ? (
+        <p className="text-lg text-ink-60">
+          Nothing left here. {data.cleared} {data.cleared === 1 ? 'word' : 'words'} you once missed,
+          you have since got right in a test.
+        </p>
+      ) : (
+        <>
+          <p className="max-w-prose text-ink-60">
+            Words you missed in a test and have not got right since. A word comes off this list when
+            you get it right in a test — so practise it before the next one.
+          </p>
+          <Rows>
+            {data.words.slice(0, MY_WORDS_SHOWN).map((word) => (
+              <Row key={word.wordId}>
+                <span className="flex-1 text-xl">{word.headwordEn}</span>
+                <span className="flex-1 text-xl text-ink-60">{word.translationDe}</span>
+                {/* Always present, like the study list, so the columns stay lined up. */}
+                <span className="label w-40 shrink-0 text-right">
+                  {word.timesMissed > 1 ? `missed ${word.timesMissed}×` : `from ${word.fromTestTitle}`}
+                </span>
+              </Row>
+            ))}
+          </Rows>
+          {more > 0 || data.cleared > 0 ? (
+            <p className="text-sm text-ink-40">
+              {[
+                more > 0 ? `and ${more} more in practice` : null,
+                data.cleared > 0
+                  ? `${data.cleared} ${data.cleared === 1 ? 'word' : 'words'} already cleared`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Practising the student's own list, through the same drill as a unit's. */
+function MyWordsDrill() {
+  const navigate = useNavigate();
+  return (
+    <Screen>
+      <Drill
+        path={student('/my-words/drill')}
+        queryKey={['student', 'my-words', 'drill']}
+        heading={<span className="label">Practice · my words</span>}
+        action={
+          <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
+            Close
+          </Button>
+        }
+      />
+    </Screen>
+  );
+}
+
 function StudyList() {
   const { testId = '' } = useParams();
   const navigate = useNavigate();
@@ -213,7 +351,12 @@ function StudyList() {
     queryFn: () =>
       api.get<{
         title: string;
-        words: Array<{ id: string; headwordEn: string; translationDe: string }>;
+        words: Array<{
+          id: string;
+          headwordEn: string;
+          translationDe: string;
+          repeatedFrom: string | null;
+        }>;
         blocks: Block[];
       }>(student(`/tests/${testId}/words`)),
   });
@@ -247,6 +390,13 @@ function StudyList() {
                 </button>
               ))
             : null}
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={() => navigate(`/s/tests/${testId}/drill`)}
+          >
+            Practise
+          </Button>
           <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
             Close
           </Button>
@@ -278,11 +428,38 @@ function StudyList() {
               <Row key={word.id}>
                 <span className="flex-1 text-xl">{word.headwordEn}</span>
                 <span className="flex-1 text-xl text-ink-60">{word.translationDe}</span>
+                {/* Named, not coloured: the accent means "right answer" here.
+                    The slot is always there, empty or not, so the two columns
+                    above it stay lined up down the whole list. */}
+                <span className="label w-40 shrink-0 text-right">
+                  {word.repeatedFrom ? `from ${word.repeatedFrom}` : ''}
+                </span>
               </Row>
             ))}
           </Rows>
         </div>
       )}
+    </Screen>
+  );
+}
+
+/** The class's practice screen. The drill itself is shared with the teacher's preview. */
+function StudentDrill() {
+  const { testId = '' } = useParams();
+  const navigate = useNavigate();
+
+  return (
+    <Screen>
+      <Drill
+        path={student(`/tests/${testId}/drill`)}
+        queryKey={['student', 'drill', testId]}
+        heading={<span className="label">Practice · words</span>}
+        action={
+          <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
+            Close
+          </Button>
+        }
+      />
     </Screen>
   );
 }
@@ -456,7 +633,8 @@ function Sprint({ mode }: { mode: 'graded' | 'practice' }) {
             {attempt.deadlineAt ? (
               <Countdown deadlineAt={attempt.deadlineAt} onExpire={expire} />
             ) : (
-              <span className="label">Practice</span>
+              // Named, because the word drill is also practice and also untimed.
+              <span className="label">Practice · questions</span>
             )}
             <span className="tabular text-sm font-semibold text-ink-40">
               {question ? `${question.index} / ${question.total}` : ''}
@@ -519,11 +697,24 @@ function Score() {
         />
       </div>
 
-      <div className="rule-t flex justify-center gap-4 pt-8">
-        <Button onClick={() => navigate(`/s/attempts/${attempt.id}/review`)}>Review answers</Button>
-        <Button variant="primary" onClick={() => navigate('/s')}>
-          Continue
-        </Button>
+      <div className="rule-t flex flex-col items-center gap-4 pt-8">
+        <div className="flex justify-center gap-4">
+          {/* The answers wait for the test to close, so an early finisher is not
+              holding the key while the others are still writing. */}
+          {attempt.reviewOpen ? (
+            <Button onClick={() => navigate(`/s/attempts/${attempt.id}/review`)}>
+              Review answers
+            </Button>
+          ) : null}
+          <Button variant="primary" onClick={() => navigate('/s')}>
+            Continue
+          </Button>
+        </div>
+        {!attempt.reviewOpen ? (
+          <p className="text-sm text-ink-40">
+            You can go through your answers once your teacher closes the test.
+          </p>
+        ) : null}
       </div>
     </Screen>
   );
@@ -545,7 +736,7 @@ function Review() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['student', 'review', attemptId],
     queryFn: () =>
-      api.get<{ attempt: AttemptView; questions: ReviewRow[] }>(
+      api.get<{ attempt: AttemptView; questions: ReviewRow[]; canPractiseWords: boolean }>(
         student(`/attempts/${attemptId}/review`),
       ),
   });
@@ -642,14 +833,28 @@ function Review() {
           })}
         </Rows>
 
-        <div className="flex justify-center">
-          <Button
-            variant="primary"
-            onClick={() => navigate(`/s/tests/${data.attempt.testId}/practice`)}
-          >
-            Practise these words
-          </Button>
-        </div>
+        {/* Two different things, so they say which is which. The words come
+            first: they carry into the next test, where these questions do not. */}
+        {/* While a test is running both kinds of practice are refused — each
+            shows answers — so neither is offered, rather than a button that
+            leads to a closed door. */}
+        {data.canPractiseWords ? (
+          <div className="flex flex-wrap justify-center gap-4">
+            <Button
+              variant="primary"
+              onClick={() => navigate(`/s/tests/${data.attempt.testId}/drill`)}
+            >
+              Practise the words
+            </Button>
+            <Button onClick={() => navigate(`/s/tests/${data.attempt.testId}/practice`)}>
+              Try the questions again
+            </Button>
+          </div>
+        ) : (
+          <p className="text-center text-sm text-ink-40">
+            Practice comes back once everyone has finished.
+          </p>
+        )}
       </div>
     </Screen>
   );
@@ -663,6 +868,8 @@ export function StudentApp() {
       <Route path="/tests/:testId/sprint" element={<Sprint mode="graded" />} />
       <Route path="/tests/:testId/practice" element={<Sprint mode="practice" />} />
       <Route path="/tests/:testId/words" element={<StudyList />} />
+      <Route path="/tests/:testId/drill" element={<StudentDrill />} />
+      <Route path="/my-words/drill" element={<MyWordsDrill />} />
       <Route path="/attempts/:attemptId/score" element={<Score />} />
       <Route path="/attempts/:attemptId/review" element={<Review />} />
       <Route path="*" element={<Navigate to="/s" replace />} />

@@ -49,12 +49,16 @@ export interface WordRow {
   trickiness_kind: string;
   trickiness_note: string | null;
   context_sentence: string | null;
+  definition_en: string | null;
   accepted_en_json: string;
   accepted_de_json: string;
   suits_fill_blank: number;
   suits_definition_mcq: number;
   included: number;
   origin: string;
+  repeated_from: string | null;
+  /** Joined in, so a deleted source test simply drops the label. */
+  repeated_from_title?: string | null;
   sort_rank: number;
 }
 
@@ -82,15 +86,25 @@ export function toWordView(row: WordRow): WordView {
     trickinessKind: row.trickiness_kind as WordView['trickinessKind'],
     trickinessNote: row.trickiness_note,
     contextSentence: row.context_sentence,
+    definitionEn: row.definition_en,
     acceptedEn: json<string[]>(row.accepted_en_json, []),
     acceptedDe: json<string[]>(row.accepted_de_json, []),
     suitsFillBlank: row.suits_fill_blank === 1,
     suitsDefinitionMcq: row.suits_definition_mcq === 1,
     included: row.included === 1,
     origin: row.origin as WordView['origin'],
+    repeatedFrom:
+      row.repeated_from && row.repeated_from_title
+        ? { testId: row.repeated_from, title: row.repeated_from_title }
+        : null,
     rank: row.sort_rank,
   };
 }
+
+/** Every read of a word carries the source test's name, for the "from Unit 3" label. */
+const WORD_SELECT = `SELECT w.*, src.title AS repeated_from_title
+     FROM test_words w
+     LEFT JOIN tests src ON src.id = w.repeated_from`;
 
 export function toTestView(db: Db, row: TestRow): TestView {
   const counts = db.get<{ words: number; included: number; questions: number; class_name: string }>(
@@ -203,11 +217,14 @@ export interface NewWord {
   trickinessKind?: string;
   trickinessNote?: string | null;
   contextSentence?: string | null;
+  definitionEn?: string | null;
   acceptedEn?: string[];
   acceptedDe?: string[];
   suitsFillBlank?: boolean;
   suitsDefinitionMcq?: boolean;
   origin?: string;
+  /** The test this word was carried over from, when it is a repeat. */
+  repeatedFrom?: string | null;
 }
 
 export function addWords(db: Db, testId: string, words: NewWord[]): WordView[] {
@@ -223,14 +240,14 @@ export function addWords(db: Db, testId: string, words: NewWord[]): WordView[] {
       db.run(
         `INSERT INTO test_words (
            id, test_id, headword_en, translation_de, pos, difficulty, trickiness,
-           trickiness_kind, trickiness_note, context_sentence,
+           trickiness_kind, trickiness_note, context_sentence, definition_en,
            accepted_en_json, accepted_de_json, suits_fill_blank, suits_definition_mcq,
-           included, origin, sort_rank)
+           included, origin, repeated_from, sort_rank)
          VALUES (
            :id, :test_id, :headword_en, :translation_de, :pos, :difficulty, :trickiness,
-           :trickiness_kind, :trickiness_note, :context_sentence,
+           :trickiness_kind, :trickiness_note, :context_sentence, :definition_en,
            :accepted_en, :accepted_de, :suits_fill_blank, :suits_definition_mcq,
-           1, :origin, :sort_rank)`,
+           1, :origin, :repeated_from, :sort_rank)`,
         {
           id,
           test_id: testId,
@@ -242,15 +259,17 @@ export function addWords(db: Db, testId: string, words: NewWord[]): WordView[] {
           trickiness_kind: word.trickinessKind ?? 'none',
           trickiness_note: word.trickinessNote ?? null,
           context_sentence: word.contextSentence ?? null,
+          definition_en: word.definitionEn ?? null,
           accepted_en: JSON.stringify(word.acceptedEn ?? []),
           accepted_de: JSON.stringify(word.acceptedDe ?? []),
           suits_fill_blank: word.suitsFillBlank ?? true,
           suits_definition_mcq: word.suitsDefinitionMcq ?? true,
           origin: word.origin ?? 'manual',
+          repeated_from: word.repeatedFrom ?? null,
           sort_rank: startRank + i,
         },
       );
-      created.push(toWordView(db.get<WordRow>('SELECT * FROM test_words WHERE id = :id', { id })!));
+      created.push(toWordView(db.get<WordRow>(`${WORD_SELECT} WHERE w.id = :id`, { id })!));
     });
   });
   return created;
@@ -259,8 +278,9 @@ export function addWords(db: Db, testId: string, words: NewWord[]): WordView[] {
 export function listWords(db: Db, testId: string): WordView[] {
   return db
     .all<WordRow>(
-      `SELECT * FROM test_words WHERE test_id = :t
-        ORDER BY difficulty DESC, sort_rank ASC, id ASC`,
+      `${WORD_SELECT}
+        WHERE w.test_id = :t
+        ORDER BY w.difficulty DESC, w.sort_rank ASC, w.id ASC`,
       { t: testId },
     )
     .map(toWordView);
@@ -289,8 +309,9 @@ export function applyCutoff(db: Db, testId: string, keep: number): number {
 export function includedWords(db: Db, testId: string): WordRow[] {
   // Ascending difficulty: this is the order the sprint runs in.
   return db.all<WordRow>(
-    `SELECT * FROM test_words WHERE test_id = :t AND included = 1
-      ORDER BY difficulty ASC, sort_rank ASC, id ASC`,
+    `${WORD_SELECT}
+      WHERE w.test_id = :t AND w.included = 1
+      ORDER BY w.difficulty ASC, w.sort_rank ASC, w.id ASC`,
     { t: testId },
   );
 }
