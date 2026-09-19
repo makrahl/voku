@@ -285,13 +285,22 @@ describe('running the sprint', () => {
 });
 
 describe('handing in and reviewing', () => {
-  it('hides the answers until the student has handed in', async () => {
+  // Handing in shows the score, not the answers: an early finisher would
+  // otherwise hold the whole key — unreached questions included — while the
+  // rest of the room is still writing. The answers follow when the test closes.
+  it('hides the answers until the teacher closes the test, even after handing in', async () => {
     await signInStudent();
     const started = await server.post(`/api/s/tests/${testId}/start`);
-    expect((await server.get(`/api/s/attempts/${started.body.attempt.id}/review`)).status).toBe(403);
+    const attemptId = started.body.attempt.id;
+    expect((await server.get(`/api/s/attempts/${attemptId}/review`)).status).toBe(403);
 
-    await server.post(`/api/s/attempts/${started.body.attempt.id}/submit`);
-    expect((await server.get(`/api/s/attempts/${started.body.attempt.id}/review`)).status).toBe(200);
+    const handedIn = await server.post(`/api/s/attempts/${attemptId}/submit`);
+    expect(handedIn.body.attempt.reviewOpen).toBe(false);
+    expect((await server.get(`/api/s/attempts/${attemptId}/review`)).status).toBe(403);
+
+    await asTeacher(() => server.post(`/api/admin/tests/${testId}/close`));
+    expect((await server.get(`/api/s/attempts/${attemptId}`)).body.attempt.reviewOpen).toBe(true);
+    expect((await server.get(`/api/s/attempts/${attemptId}/review`)).status).toBe(200);
   });
 
   it('distinguishes a wrong answer from a question never reached', async () => {
@@ -299,6 +308,7 @@ describe('handing in and reviewing', () => {
     let state = (await server.post(`/api/s/tests/${testId}/start`)).body;
     state = (await answerNext(state.attempt.id, state.question, false)).body;
     await server.post(`/api/s/attempts/${state.attempt.id}/submit`);
+    await asTeacher(() => server.post(`/api/admin/tests/${testId}/close`));
 
     const review = (await server.get(`/api/s/attempts/${state.attempt.id}/review`)).body;
     expect(review.questions[0]).toMatchObject({ correct: false, reached: true });

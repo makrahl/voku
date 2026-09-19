@@ -301,15 +301,14 @@ describe('what the review screen may offer', () => {
     });
   }
 
-  // The word list is the answer to half the questions, so an early finisher
-  // must not be handed it while the others are still writing.
-  it('withholds the word drill from someone who handed in while the test runs', async () => {
+  // The word list is the answer to half the questions, and the review is the
+  // answer to all of them, so an early finisher gets neither while the others
+  // are still writing.
+  it('withholds both the answers and the word drill from someone who handed in while the test runs', async () => {
     const attemptId = await submitEarly();
 
-    const review = await asStudent(
-      async () => (await server.get(`/api/s/attempts/${attemptId}/review`)).body,
-    );
-    expect(review.canPractiseWords).toBe(false);
+    const review = await asStudent(async () => server.get(`/api/s/attempts/${attemptId}/review`));
+    expect(review.status).toBe(403);
 
     const refused = await asStudent(async () => server.get(`/api/s/tests/${testId}/drill`));
     expect(refused.status).toBe(403);

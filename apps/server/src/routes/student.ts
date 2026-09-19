@@ -21,6 +21,7 @@ import {
   getAttempt,
   nextQuestion,
   recordAnswer,
+  reviewOpen,
   settleIfExpired,
   startAttempt,
   submitAttempt,
@@ -397,13 +398,13 @@ studentRouter.get(
     const attempt = ownAttempt(req, param(req, 'id'));
     const test = req.db.get<TestRow>('SELECT * FROM tests WHERE id = :id', { id: attempt.test_id })!;
 
-    // Answers stay hidden until the student has handed in or the test is over.
-    if (!attempt.submitted_at && test.status !== 'closed') {
-      throw forbidden('You can look at the answers once you have handed in.');
+    // Not on handing in: an early finisher would hold the whole answer key while
+    // the rest of the room is still writing. See reviewOpen.
+    if (!reviewOpen(req.db, test.id)) {
+      throw forbidden('Your answers appear here once your teacher closes the test.');
     }
     // An earlier unit's review is a list of answers too, and paused like the
-    // rest while another test runs. Reviewing the running test itself after
-    // handing in is left as it was: that was decided before, on its own terms.
+    // rest while another test runs.
     if (testRunning(req.db, test.class_id, test.id)) throw forbidden(PAUSED);
 
     const rows = req.db.all<{

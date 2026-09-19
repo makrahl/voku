@@ -149,6 +149,22 @@ export function percentFor(attempt: AttemptRow): number {
   return Math.round((attempt.correct_count / attempt.target_snapshot) * 100);
 }
 
+/**
+ * Whether a student may go through their answers: only once the test is closed.
+ *
+ * It used to open as soon as they handed in, which gave an early finisher the
+ * whole answer key — reached and unreached questions alike — on one screen,
+ * while the rest of the room was still writing. Handing in now shows the score;
+ * the answers follow when the teacher closes the test. The instant feedback
+ * during the sprint is a separate decision and is unchanged.
+ */
+export function reviewOpen(db: Db, testId: string): boolean {
+  return (
+    db.get<{ status: string }>('SELECT status FROM tests WHERE id = :id', { id: testId })?.status ===
+    'closed'
+  );
+}
+
 export function attemptView(db: Db, attempt: AttemptRow, testTitle: string): AttemptView {
   const now = new Date();
   return {
@@ -166,6 +182,7 @@ export function attemptView(db: Db, attempt: AttemptRow, testTitle: string): Att
     targetCount: attempt.target_snapshot,
     percent: percentFor(attempt),
     poolSize: poolFor(db, attempt.test_id).length,
+    reviewOpen: reviewOpen(db, attempt.test_id),
   };
 }
 

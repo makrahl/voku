@@ -697,11 +697,24 @@ function Score() {
         />
       </div>
 
-      <div className="rule-t flex justify-center gap-4 pt-8">
-        <Button onClick={() => navigate(`/s/attempts/${attempt.id}/review`)}>Review answers</Button>
-        <Button variant="primary" onClick={() => navigate('/s')}>
-          Continue
-        </Button>
+      <div className="rule-t flex flex-col items-center gap-4 pt-8">
+        <div className="flex justify-center gap-4">
+          {/* The answers wait for the test to close, so an early finisher is not
+              holding the key while the others are still writing. */}
+          {attempt.reviewOpen ? (
+            <Button onClick={() => navigate(`/s/attempts/${attempt.id}/review`)}>
+              Review answers
+            </Button>
+          ) : null}
+          <Button variant="primary" onClick={() => navigate('/s')}>
+            Continue
+          </Button>
+        </div>
+        {!attempt.reviewOpen ? (
+          <p className="text-sm text-ink-40">
+            You can go through your answers once your teacher closes the test.
+          </p>
+        ) : null}
       </div>
     </Screen>
   );

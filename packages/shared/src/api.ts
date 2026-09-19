@@ -340,6 +340,8 @@ export interface AttemptView {
   targetCount: number;
   percent: number;
   poolSize: number;
+  /** The answers can be gone through — only once the teacher has closed the test. */
+  reviewOpen: boolean;
 }
 
 export interface StudentHomeView {

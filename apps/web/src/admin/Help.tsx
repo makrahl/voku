@@ -273,9 +273,11 @@ const TOPICS: Topic[] = [
           not told who revised, or how it went.
         </p>
         <p>
-          When a student hands in, they see their percentage and a review of the questions they got
-          wrong, with the right answer next to what they wrote. Misses come first — that is the part
-          worth reading.
+          When a student hands in, they see their percentage straight away. The <b>review</b> — every
+          question with the right answer next to what they wrote, misses first — opens once you
+          close the test. Handed in early, it would be the whole answer key, unreached questions
+          included, in a room that is still writing. During the sprint itself each answer is still
+          followed by the right one, as before.
         </p>
         <p>
           From there they get two things, and they are different on purpose.{' '}

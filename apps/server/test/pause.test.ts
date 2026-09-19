@@ -119,13 +119,16 @@ describe('while a test is running', () => {
     expect((await server.get(`/api/s/tests/${unit1}/words`)).status).toBe(403);
   });
 
-  // Reviewing the running test itself after handing in was decided before,
-  // on its own terms, and is left as it was — but it offers no practice.
-  it('still lets a student who handed in see their own review of it, without practice', async () => {
+  // Even their own review of the running test waits: handed in early, it would
+  // be the whole answer key in a room still writing.
+  it('keeps even a student’s own review of the running test until it closes', async () => {
     const attempt = await sit(unit2);
+    expect((await server.get(`/api/s/attempts/${attempt}/review`)).status).toBe(403);
+
+    await server.post(`/api/admin/tests/${unit2}/close`);
     const review = await server.get(`/api/s/attempts/${attempt}/review`);
     expect(review.status).toBe(200);
-    expect(review.body.canPractiseWords).toBe(false);
+    expect(review.body.canPractiseWords).toBe(true);
   });
 
   it('stops a practice run that was started before the test opened', async () => {
