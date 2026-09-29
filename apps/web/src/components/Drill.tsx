@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { DrillChoice, DrillFeedback, DrillItem, DrillView } from '@voku/shared';
 import { api } from '../lib/api.ts';
@@ -14,6 +14,16 @@ import {
   type DrillMode,
   type Round,
 } from '../lib/drill-round.ts';
+import {
+  EMPTY,
+  clear as clearProgress,
+  knownCount,
+  load as loadProgress,
+  nextStage,
+  record as recordProgress,
+  save as saveProgress,
+  type Progress,
+} from '../lib/practice-progress.ts';
 import { Button, Empty, Spinner } from './ui.tsx';
 import { FeedbackFlash, QuestionCard, holdUntilNext, useFlash } from './Sprint.tsx';
 
@@ -33,6 +43,7 @@ export function Drill({
   queryKey,
   heading,
   action,
+  progressKey,
 }: {
   /** API path serving the drill; answers are POSTed to the same one. */
   path: string;
@@ -40,10 +51,18 @@ export function Drill({
   heading: ReactNode;
   /** Sits at the right of the header — "Close" for a student, "Done" for a preview. */
   action: ReactNode;
+  /**
+   * Where this device keeps how far the student has got. Left out by the
+   * teacher's preview, which is a look at the drill, not a go at the list.
+   */
+  progressKey?: string;
 }) {
   const [round, setRound] = useState<Round | null>(null);
   const [busy, setBusy] = useState(false);
   const [skipped, setSkipped] = useState(false);
+  const [progress, setProgress] = useState<Progress>(() =>
+    progressKey ? loadProgress(progressKey) : EMPTY,
+  );
   // No clock here, so the answer waits for the student rather than the other
   // way round — the timed flash was the first thing the class complained about.
   const { feedback, show, next } = useFlash<DrillFeedback>(holdUntilNext);
@@ -60,9 +79,26 @@ export function Drill({
 
   const begin = useCallback((wordIds: string[]) => setRound(startRound(shuffled(wordIds))), []);
 
+  const allIds = useMemo(() => (data?.items ?? []).map((item) => item.wordId), [data]);
+
+  // A stage rather than the whole list, picking up where this device left off.
+  // Everything known already means the stage is empty, and then the round is
+  // the whole list again — finished should mean "go again", not a wall.
   useEffect(() => {
-    if (data && round === null) begin(data.items.map((item) => item.wordId));
-  }, [data, round, begin]);
+    if (!data || round !== null) return;
+    const stage = progressKey ? nextStage(allIds, progress) : [];
+    begin(stage.length > 0 ? stage : allIds);
+  }, [data, round, begin, allIds, progress, progressKey]);
+
+  // Recorded once, when the round ends: what the student got right first time.
+  const recorded = useRef<Round | null>(null);
+  useEffect(() => {
+    if (!round || !progressKey || !isOver(round) || recorded.current === round) return;
+    recorded.current = round;
+    const updated = recordProgress(progress, round.outcome);
+    saveProgress(progressKey, updated);
+    setProgress(updated);
+  }, [round, progress, progressKey]);
 
   const card = round ? currentCard(round) : undefined;
   const item = card ? items.get(card.wordId) : undefined;
@@ -113,6 +149,8 @@ export function Drill({
   const over = isOver(round);
   const counts = tally(round);
   const again = neededAnotherGo(round);
+  // What a next stage would hold — empty once this device has the whole list.
+  const ahead = progressKey ? nextStage(allIds, progress) : [];
 
   // Said quietly above the question: where the word is from, and why it is back.
   const note = card
@@ -133,6 +171,12 @@ export function Drill({
       <header className="rule-b flex flex-wrap items-baseline justify-between gap-4 pb-5">
         {heading}
         <div className="flex items-center gap-6">
+          {progressKey && allIds.length > 0 ? (
+            // This iPad's memory, said plainly so nobody expects it elsewhere.
+            <span className="label text-ink-40">
+              {knownCount(allIds, progress)}/{allIds.length} learned here
+            </span>
+          ) : null}
           {!over ? (
             // Words, not cards: a missed word coming back must not make the
             // total jump, or the round looks like it is getting longer.
@@ -164,19 +208,47 @@ export function Drill({
                     .filter(Boolean)
                     .join(', ') + '. Practising costs nothing — go again.'}
             </p>
+            {progressKey ? (
+              <p className="max-w-md text-sm text-ink-40">
+                {ahead.length > 0
+                  ? `${knownCount(allIds, progress)} of ${allIds.length} words are behind you on this iPad. The next stage carries on from there.`
+                  : `That is the whole list on this iPad — ${allIds.length} words. Going again starts from the beginning.`}
+              </p>
+            ) : null}
             <div className="mt-4 flex flex-wrap items-center justify-center gap-4">
               {again.length > 0 ? (
                 <Button variant="primary" size="lg" onClick={() => begin(again)}>
                   The ones that needed another go
                 </Button>
               ) : null}
+              {ahead.length > 0 ? (
+                <Button
+                  variant={again.length > 0 ? 'secondary' : 'primary'}
+                  size="lg"
+                  onClick={() => begin(ahead)}
+                >
+                  {`Next ${ahead.length} words`}
+                </Button>
+              ) : null}
               <Button
-                variant={again.length > 0 ? 'secondary' : 'primary'}
+                variant={again.length > 0 || ahead.length > 0 ? 'secondary' : 'primary'}
                 size="lg"
-                onClick={() => begin(data.items.map((i) => i.wordId))}
+                onClick={() => begin(allIds)}
               >
                 All of them again
               </Button>
+              {progressKey && knownCount(allIds, progress) > 0 ? (
+                <button
+                  type="button"
+                  className="label text-ink-40 transition-colors hover:text-ink"
+                  onClick={() => {
+                    clearProgress(progressKey);
+                    setProgress(EMPTY);
+                  }}
+                >
+                  Start this list again
+                </button>
+              ) : null}
             </div>
           </div>
         ) : feedback ? (

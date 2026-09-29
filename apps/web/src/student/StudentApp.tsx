@@ -329,6 +329,7 @@ function MyWordsDrill() {
       <Drill
         path={student('/my-words/drill')}
         queryKey={['student', 'my-words', 'drill']}
+        progressKey="my-words"
         heading={<span className="label">Practice · my words</span>}
         action={
           <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
@@ -453,6 +454,7 @@ function StudentDrill() {
       <Drill
         path={student(`/tests/${testId}/drill`)}
         queryKey={['student', 'drill', testId]}
+        progressKey={`test:${testId}`}
         heading={<span className="label">Practice · words</span>}
         action={
           <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
