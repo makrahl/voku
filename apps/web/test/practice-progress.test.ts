@@ -1,11 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Outcome } from '../src/lib/drill-round.ts';
 import {
   EMPTY,
   STAGE_SIZE,
+  forgetOthers,
   knownCount,
+  load,
   nextStage,
   record,
+  save,
   type Progress,
 } from '../src/lib/practice-progress.ts';
 
@@ -71,5 +74,65 @@ describe('the next stage', () => {
   it('counts progress against the list as it stands today', () => {
     const stale: Progress = { known: ['w1', 'gone-from-the-list'], updatedAt: '' };
     expect(knownCount(LIST, stale)).toBe(1);
+  });
+});
+
+/**
+ * The round of words that already went wrong is not a fresh start for them.
+ * Getting one right among a handful you have just missed is not the same as
+ * getting it right in the stage, and recording it as known would quietly undo
+ * the rule the whole thing rests on.
+ */
+describe('the round of ones that needed another go', () => {
+  it('cannot make a word known', () => {
+    const after = record(EMPTY, outcomes({ w1: 'first', w2: 'first' }), { promote: false });
+    expect(after.known).toEqual([]);
+  });
+
+  // It can still take one off: going wrong is always worth remembering.
+  it('still drops a word that goes wrong again', () => {
+    const before: Progress = { known: ['w1', 'w2'], updatedAt: '' };
+    const after = record(before, outcomes({ w1: 'missed' }), { promote: false });
+    expect(after.known).toEqual(['w2']);
+  });
+});
+
+/**
+ * School iPads are handed round. What one child has practised must not greet
+ * the next child as their own progress.
+ */
+describe('a device shared between students', () => {
+  // Stored items are the object's own keys and the methods live on its
+  // prototype, which is how a real Storage behaves under Object.keys().
+  const methods = {
+    getItem(this: Record<string, string>, k: string) {
+      return this[k] ?? null;
+    },
+    setItem(this: Record<string, string>, k: string, v: string) {
+      this[k] = v;
+    },
+    removeItem(this: Record<string, string>, k: string) {
+      delete this[k];
+    },
+  };
+
+  beforeEach(() => {
+    (globalThis as { window?: unknown }).window = { localStorage: Object.create(methods) };
+  });
+
+  it('keeps one student’s progress out of another’s hands', () => {
+    save('lena', 'test:unit-3', { known: ['w1', 'w2'], updatedAt: '' });
+    expect(load('lena', 'test:unit-3').known).toEqual(['w1', 'w2']);
+    expect(load('jonas', 'test:unit-3')).toEqual(EMPTY);
+  });
+
+  it('forgets the last student when the next one signs in', () => {
+    save('lena', 'test:unit-3', { known: ['w1'], updatedAt: '' });
+    save('jonas', 'test:unit-3', { known: ['w9'], updatedAt: '' });
+
+    forgetOthers('jonas');
+
+    expect(load('jonas', 'test:unit-3').known).toEqual(['w9']);
+    expect(load('lena', 'test:unit-3')).toEqual(EMPTY);
   });
 });

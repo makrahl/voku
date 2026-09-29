@@ -52,16 +52,21 @@ export function Drill({
   /** Sits at the right of the header — "Close" for a student, "Done" for a preview. */
   action: ReactNode;
   /**
-   * Where this device keeps how far the student has got. Left out by the
-   * teacher's preview, which is a look at the drill, not a go at the list.
+   * Which list this is, for the device's memory of it. Paired with the student
+   * signed in here — school iPads are shared, and one child's stage must not
+   * become the next child's. Left out by the teacher's preview, which is a look
+   * at the drill, not a go at the list.
    */
-  progressKey?: string;
+  progressKey?: { studentId: string; list: string };
 }) {
   const [round, setRound] = useState<Round | null>(null);
   const [busy, setBusy] = useState(false);
   const [skipped, setSkipped] = useState(false);
+  // A round of words that already went wrong cannot make any of them "known":
+  // right first time there means first time among the ones just missed.
+  const [promotes, setPromotes] = useState(true);
   const [progress, setProgress] = useState<Progress>(() =>
-    progressKey ? loadProgress(progressKey) : EMPTY,
+    progressKey ? loadProgress(progressKey.studentId, progressKey.list) : EMPTY,
   );
   // No clock here, so the answer waits for the student rather than the other
   // way round — the timed flash was the first thing the class complained about.
@@ -77,7 +82,10 @@ export function Drill({
     [data],
   );
 
-  const begin = useCallback((wordIds: string[]) => setRound(startRound(shuffled(wordIds))), []);
+  const begin = useCallback((wordIds: string[], { promote = true } = {}) => {
+    setPromotes(promote);
+    setRound(startRound(shuffled(wordIds)));
+  }, []);
 
   const allIds = useMemo(() => (data?.items ?? []).map((item) => item.wordId), [data]);
 
@@ -95,10 +103,10 @@ export function Drill({
   useEffect(() => {
     if (!round || !progressKey || !isOver(round) || recorded.current === round) return;
     recorded.current = round;
-    const updated = recordProgress(progress, round.outcome);
-    saveProgress(progressKey, updated);
+    const updated = recordProgress(progress, round.outcome, { promote: promotes });
+    saveProgress(progressKey.studentId, progressKey.list, updated);
     setProgress(updated);
-  }, [round, progress, progressKey]);
+  }, [round, progress, progressKey, promotes]);
 
   const card = round ? currentCard(round) : undefined;
   const item = card ? items.get(card.wordId) : undefined;
@@ -217,7 +225,10 @@ export function Drill({
             ) : null}
             <div className="mt-4 flex flex-wrap items-center justify-center gap-4">
               {again.length > 0 ? (
-                <Button variant="primary" size="lg" onClick={() => begin(again)}>
+                // Nothing here can become "known": these are the words that
+                // just went wrong, and getting one right among them is not the
+                // same as getting it right in the stage.
+                <Button variant="primary" size="lg" onClick={() => begin(again, { promote: false })}>
                   The ones that needed another go
                 </Button>
               ) : null}
@@ -242,7 +253,7 @@ export function Drill({
                   type="button"
                   className="label text-ink-40 transition-colors hover:text-ink"
                   onClick={() => {
-                    clearProgress(progressKey);
+                    clearProgress(progressKey.studentId, progressKey.list);
                     setProgress(EMPTY);
                   }}
                 >

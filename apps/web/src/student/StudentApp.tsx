@@ -10,6 +10,7 @@ import type {
   StudentQuestionView,
 } from '@voku/shared';
 import { ApiError, api, student } from '../lib/api.ts';
+import { forgetOthers } from '../lib/practice-progress.ts';
 import { Button, Empty, Rows, Row, Spinner, Status, Wordmark, cx } from '../components/ui.tsx';
 import { StudyText, type Block } from './StudyText.tsx';
 import { Drill } from '../components/Drill.tsx';
@@ -76,6 +77,19 @@ function Message({
 }
 
 /** `/s/<token>` — swaps the token for a cookie so it leaves the address bar. */
+/**
+ * Who is signed in on this device, for anything kept per student rather than
+ * per device. Undefined while it is still being fetched, so a caller waits
+ * rather than guessing.
+ */
+function useMe(): string | undefined {
+  const { data } = useQuery({
+    queryKey: ['student', 'me'],
+    queryFn: () => api.get<StudentHomeView>(student('/me')),
+  });
+  return data?.student.id;
+}
+
 function TokenLogin() {
   const { token = '' } = useParams();
   const navigate = useNavigate();
@@ -84,8 +98,13 @@ function TokenLogin() {
   useEffect(() => {
     let cancelled = false;
     api
-      .post(student('/session'), { token })
-      .then(() => !cancelled && navigate('/s', { replace: true }))
+      .post<{ id: string }>(student('/session'), { token })
+      .then((me) => {
+        if (cancelled) return;
+        // A shared iPad: whoever had it before does not stay on it.
+        forgetOthers(me.id);
+        navigate('/s', { replace: true });
+      })
       .catch((err: ApiError) => !cancelled && setError(err.message));
     return () => {
       cancelled = true;
@@ -324,12 +343,16 @@ function MyWordsSection({
 /** Practising the student's own list, through the same drill as a unit's. */
 function MyWordsDrill() {
   const navigate = useNavigate();
+  const me = useMe();
+  // Waits for who is signed in: starting without it would hand out a round of
+  // the whole list and file the result under nobody.
+  if (!me) return <Centred><Spinner /></Centred>;
   return (
     <Screen>
       <Drill
         path={student('/my-words/drill')}
         queryKey={['student', 'my-words', 'drill']}
-        progressKey="my-words"
+        progressKey={{ studentId: me, list: 'my-words' }}
         heading={<span className="label">Practice · my words</span>}
         action={
           <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>
@@ -448,13 +471,15 @@ function StudyList() {
 function StudentDrill() {
   const { testId = '' } = useParams();
   const navigate = useNavigate();
+  const me = useMe();
 
+  if (!me) return <Centred><Spinner /></Centred>;
   return (
     <Screen>
       <Drill
         path={student(`/tests/${testId}/drill`)}
         queryKey={['student', 'drill', testId]}
-        progressKey={`test:${testId}`}
+        progressKey={{ studentId: me, list: `test:${testId}` }}
         heading={<span className="label">Practice · words</span>}
         action={
           <Button size="sm" variant="quiet" onClick={() => navigate('/s')}>

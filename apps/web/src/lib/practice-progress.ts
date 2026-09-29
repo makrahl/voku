@@ -26,16 +26,34 @@ export interface Progress {
 
 export const EMPTY: Progress = { known: [], updatedAt: '' };
 
+export interface RecordOptions {
+  /**
+   * Whether a word may *become* known in this round.
+   *
+   * False for the round of words that already needed another go: there, "right
+   * first time" means the first time in a round made only of words the student
+   * has just got wrong, which is not the same thing at all. Such a round can
+   * still take a word off the list — going wrong is always worth remembering.
+   */
+  promote?: boolean;
+  now?: Date;
+}
+
 /**
  * Only "right first time" counts as known. Needing another go inside the round
  * is exactly the state this is meant to remember, not to forgive — and a word
  * that goes wrong later drops out again, so the list cannot silently rot.
  */
-export function record(progress: Progress, outcomes: Record<string, Outcome>, now = new Date()): Progress {
+export function record(
+  progress: Progress,
+  outcomes: Record<string, Outcome>,
+  { promote = true, now = new Date() }: RecordOptions = {},
+): Progress {
   const known = new Set(progress.known);
   for (const [wordId, outcome] of Object.entries(outcomes)) {
-    if (outcome === 'first') known.add(wordId);
-    else known.delete(wordId);
+    if (outcome === 'first') {
+      if (promote) known.add(wordId);
+    } else known.delete(wordId);
   }
   return { known: [...known], updatedAt: now.toISOString() };
 }
@@ -61,16 +79,23 @@ export function nextStage(wordIds: string[], progress: Progress, size = STAGE_SI
 // The device's own memory
 // ---------------------------------------------------------------------------
 
-const key = (listKey: string) => `voku.practice.${listKey}`;
+const PREFIX = 'voku.practice.';
+
+/**
+ * Per student, not per device. A set of school iPads is handed round, and the
+ * next child to sign in on this one must not inherit the last child's stage —
+ * nor see how far they had got in the header.
+ */
+const key = (studentId: string, listKey: string) => `${PREFIX}${studentId}.${listKey}`;
 
 /**
  * Storage can be switched off, full, or refused outright in a private window,
  * and practice has to work anyway — so every failure here means "this device
  * remembers nothing", never an error on screen.
  */
-export function load(listKey: string): Progress {
+export function load(studentId: string, listKey: string): Progress {
   try {
-    const raw = window.localStorage.getItem(key(listKey));
+    const raw = window.localStorage.getItem(key(studentId, listKey));
     if (!raw) return EMPTY;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return EMPTY;
@@ -82,18 +107,36 @@ export function load(listKey: string): Progress {
   }
 }
 
-export function save(listKey: string, progress: Progress): void {
+export function save(studentId: string, listKey: string, progress: Progress): void {
   try {
-    window.localStorage.setItem(key(listKey), JSON.stringify(progress));
+    window.localStorage.setItem(key(studentId, listKey), JSON.stringify(progress));
   } catch {
     // Nothing to do and nothing to say: the round itself is unaffected.
   }
 }
 
-export function clear(listKey: string): void {
+export function clear(studentId: string, listKey: string): void {
   try {
-    window.localStorage.removeItem(key(listKey));
+    window.localStorage.removeItem(key(studentId, listKey));
   } catch {
     // As above.
+  }
+}
+
+/**
+ * Drops every other student's practice record from this device, called when
+ * somebody signs in. On a shared iPad the last child's word list has no
+ * business outliving their lesson.
+ */
+export function forgetOthers(studentId: string): void {
+  try {
+    const mine = `${PREFIX}${studentId}.`;
+    for (const stored of Object.keys(window.localStorage)) {
+      if (stored.startsWith(PREFIX) && !stored.startsWith(mine)) {
+        window.localStorage.removeItem(stored);
+      }
+    }
+  } catch {
+    // As above: a device that will not talk about its storage simply forgets.
   }
 }
