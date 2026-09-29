@@ -511,7 +511,8 @@ function Sprint({ mode }: { mode: 'graded' | 'practice' }) {
   const [busy, setBusy] = useState(false);
   const [chosen, setChosen] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<string | null>(null);
-  const { feedback, show } = useFlash();
+  const [skipped, setSkipped] = useState(false);
+  const { feedback, show, next } = useFlash();
 
   const home = useQuery({
     queryKey: ['student', 'me'],
@@ -541,6 +542,7 @@ function Sprint({ mode }: { mode: 'graded' | 'practice' }) {
     if (!state?.question || busy) return;
     setBusy(true);
     setChosen(given);
+    setSkipped(given === '');
     try {
       const result = await api.post<{
         feedback: AnswerFeedback;
@@ -556,6 +558,7 @@ function Sprint({ mode }: { mode: 'graded' | 'practice' }) {
         setBusy(false);
         setChosen(null);
         setRevealed(null);
+        setSkipped(false);
         if (!result.question) {
           finish(result.attempt.id);
           return;
@@ -646,7 +649,7 @@ function Sprint({ mode }: { mode: 'graded' | 'practice' }) {
 
       <main className="flex flex-1 flex-col justify-center py-10">
         {feedback ? (
-          <FeedbackFlash feedback={feedback} />
+          <FeedbackFlash feedback={feedback} skipped={skipped} onNext={next} />
         ) : question ? (
           <QuestionCard
             question={question}
@@ -654,6 +657,7 @@ function Sprint({ mode }: { mode: 'graded' | 'practice' }) {
             chosen={chosen}
             correctAnswer={revealed}
             onAnswer={answer}
+            onSkip={() => void answer('')}
           />
         ) : (
           <Spinner />

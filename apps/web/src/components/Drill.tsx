@@ -15,7 +15,7 @@ import {
   type Round,
 } from '../lib/drill-round.ts';
 import { Button, Empty, Spinner } from './ui.tsx';
-import { FeedbackFlash, QuestionCard, useFlash } from './Sprint.tsx';
+import { FeedbackFlash, QuestionCard, holdUntilNext, useFlash } from './Sprint.tsx';
 
 /**
  * Drilling the word pairs.
@@ -43,7 +43,10 @@ export function Drill({
 }) {
   const [round, setRound] = useState<Round | null>(null);
   const [busy, setBusy] = useState(false);
-  const { feedback, show } = useFlash<DrillFeedback>();
+  const [skipped, setSkipped] = useState(false);
+  // No clock here, so the answer waits for the student rather than the other
+  // way round — the timed flash was the first thing the class complained about.
+  const { feedback, show, next } = useFlash<DrillFeedback>(holdUntilNext);
 
   const { data, isLoading, error } = useQuery({
     queryKey,
@@ -93,14 +96,17 @@ export function Drill({
   const submit = async (given: string) => {
     if (!card || busy) return;
     setBusy(true);
+    setSkipped(given === '');
     try {
       const result = await api.post<DrillFeedback>(path, { wordId: card.wordId, given });
       show(result, () => {
         setRound((r) => (r ? record(r, result.correct, askedAs) : r));
         setBusy(false);
+        setSkipped(false);
       });
     } catch {
       setBusy(false);
+      setSkipped(false);
     }
   };
 
@@ -174,7 +180,7 @@ export function Drill({
             </div>
           </div>
         ) : feedback ? (
-          <FeedbackFlash feedback={feedback} />
+          <FeedbackFlash feedback={feedback} skipped={skipped} onNext={next} />
         ) : waitingForChoice || !card || !item ? (
           <Spinner />
         ) : (
@@ -195,7 +201,12 @@ export function Drill({
                         prompt: item.prompt,
                         options: choice.data!.options,
                       }
-                    : { type: 'translate_input', direction: item.direction, prompt: item.prompt },
+                    : {
+                        type: 'translate_input',
+                        direction: item.direction,
+                        prompt: item.prompt,
+                        ...(item.context ? { context: item.context } : {}),
+                      },
               }}
               disabled={busy}
               chosen={null}
@@ -204,6 +215,10 @@ export function Drill({
                 // A choice answers with the option's position; the grader wants its text.
                 void submit(askedAs === 'choice' ? choice.data!.options[Number(given)]! : given)
               }
+              // Practice has nothing to protect: not knowing is a legitimate
+              // answer, and the word comes straight back later in the round.
+              onSkip={() => void submit('')}
+              skipLabel="I don’t know this one"
             />
           </div>
         )}
