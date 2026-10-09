@@ -10,6 +10,7 @@ import {
   type QuestionType,
   type QuestionView,
   type RepeatCandidate,
+  type ResultRow,
   type TestView,
   type WordView,
 } from '@voku/shared';
@@ -777,17 +778,56 @@ function WordSheetFields({
   word: WordView;
   onSaved: () => void;
 }) {
+  const [headword, setHeadword] = useState(word.headwordEn);
+  const [translation, setTranslation] = useState(word.translationDe);
   const [definition, setDefinition] = useState(word.definitionEn ?? '');
   const [example, setExample] = useState(word.contextSentence ?? '');
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const save = useMutation({
-    mutationFn: (body: { definitionEn?: string; contextSentence?: string }) =>
-      api.patch(admin(`/tests/${test.id}/words/${word.id}`), body),
+    mutationFn: (body: {
+      headwordEn?: string;
+      translationDe?: string;
+      definitionEn?: string;
+      contextSentence?: string;
+    }) => api.patch(admin(`/tests/${test.id}/words/${word.id}`), body),
     onSuccess: onSaved,
+    onError: (e: ApiError) => setError(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => api.delete(admin(`/tests/${test.id}/words/${word.id}`)),
+    onSuccess: onSaved,
+    onError: (e: ApiError) => setError(e.message),
   });
 
   return (
     <div className="flex flex-col gap-4 pl-10">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="The word" hint="As the class should write it.">
+          <Input
+            value={headword}
+            onChange={(e) => setHeadword(e.target.value)}
+            onBlur={() =>
+              headword.trim() &&
+              headword !== word.headwordEn &&
+              save.mutate({ headwordEn: headword.trim() })
+            }
+          />
+        </Field>
+        <Field label="German" hint="The translation marked correct.">
+          <Input
+            value={translation}
+            onChange={(e) => setTranslation(e.target.value)}
+            onBlur={() =>
+              translation.trim() &&
+              translation !== word.translationDe &&
+              save.mutate({ translationDe: translation.trim() })
+            }
+          />
+        </Field>
+      </div>
       <Field
         label="Definition, in English"
         hint="Plain English, and without using the word itself — otherwise the sheet gives the answer away."
@@ -811,6 +851,34 @@ function WordSheetFields({
           placeholder={`a sentence with “${word.headwordEn}” in it`}
         />
       </Field>
+      <ErrorText>{error}</ErrorText>
+      <div className="flex items-center gap-4">
+        {confirming ? (
+          <>
+            <span className="text-sm text-ink">
+              Take “{word.headwordEn}” out of this test for good?
+            </span>
+            <Button size="sm" variant="primary" onClick={() => remove.mutate()} disabled={remove.isPending}>
+              Remove it
+            </Button>
+            <Button size="sm" variant="quiet" onClick={() => setConfirming(false)}>
+              Keep it
+            </Button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="label text-ink-40 transition-colors hover:text-ink"
+            onClick={() => setConfirming(true)}
+          >
+            Remove this word
+          </button>
+        )}
+        {/* Unticking is the gentler move, and most of the time the right one. */}
+        <span className="text-xs text-ink-40">
+          To leave it out of this test but keep it on the list, untick it instead.
+        </span>
+      </div>
     </div>
   );
 }
@@ -1183,6 +1251,22 @@ function QuestionsStep({
       </div>
       <ErrorText>{error}</ErrorText>
 
+      {/* A question is built once and then stands on its own, so a word
+          corrected afterwards leaves it asking the old thing — and marking the
+          old answer right. Said here rather than quietly fixed, because
+          rebuilding throws away any question the teacher has edited by hand. */}
+      {test.staleCount > 0 ? (
+        <Note>
+          <b>
+            {test.staleCount} {test.staleCount === 1 ? 'question still asks' : 'questions still ask'}{' '}
+            the old wording.
+          </b>{' '}
+          You changed {test.staleCount === 1 ? 'a word' : 'words'} in the list after these were
+          built, so they would still mark the old answer as the right one. Rebuild them above — or
+          rewrite just the ones concerned, one at a time, below.
+        </Note>
+      ) : null}
+
       {report ? <MixReport report={report} /> : null}
 
       {questions.length === 0 ? (
@@ -1448,6 +1532,77 @@ function OpenStep({
         Publishing shows students the word list to learn from. Opening starts the sprint — the list
         disappears while it runs, and comes back once you close it.
       </p>
+
+      <DeleteTest test={test} />
+    </div>
+  );
+}
+
+/**
+ * Getting rid of a test for good.
+ *
+ * Two clicks, and the second one says what goes with it. A test nobody has
+ * sat is just a draft and goes quietly; one the class has taken takes their
+ * results with it, and with them the misses behind each student's own list and
+ * the spacing suggestions — so that sentence is on screen before the button,
+ * not in a dialog that is clicked away by reflex.
+ */
+function DeleteTest({ test }: { test: TestView }) {
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const results = useQuery({
+    queryKey: ['admin', 'results', test.id],
+    queryFn: () => api.get<{ rows: ResultRow[] }>(admin(`/tests/${test.id}/results`)),
+    enabled: confirming,
+  });
+  const sat = (results.data?.rows ?? []).filter((row) => row.state !== 'not_started').length;
+
+  const remove = useMutation({
+    mutationFn: () =>
+      api.delete(admin(`/tests/${test.id}${sat > 0 ? '?withResults=true' : ''}`)),
+    onSuccess: () => navigate(`/admin/classes/${test.classId}`),
+    onError: (e: ApiError) => setError(e.message),
+  });
+
+  if (test.status === 'open') return null;
+
+  return (
+    <div className="rule-t flex flex-col gap-3 pt-6">
+      {confirming ? (
+        <>
+          <p className="max-w-prose text-ink">
+            <b>Delete “{test.title}” for good?</b>{' '}
+            {results.isLoading
+              ? 'Checking what it holds…'
+              : sat > 0
+                ? `${sat} ${sat === 1 ? 'student has' : 'students have'} taken it. Their results go too, and with them the misses behind their own word lists. This cannot be undone.`
+                : 'Nobody has taken it, so only the test itself goes. This cannot be undone.'}
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="danger"
+              onClick={() => remove.mutate()}
+              disabled={remove.isPending || results.isLoading}
+            >
+              {sat > 0 ? 'Delete it and the results' : 'Delete it'}
+            </Button>
+            <Button variant="quiet" onClick={() => setConfirming(false)}>
+              Keep it
+            </Button>
+          </div>
+          <ErrorText>{error}</ErrorText>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="label self-start text-ink-40 transition-colors hover:text-ink"
+          onClick={() => setConfirming(true)}
+        >
+          Delete this test
+        </button>
+      )}
     </div>
   );
 }

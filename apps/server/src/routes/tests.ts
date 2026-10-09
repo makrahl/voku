@@ -147,17 +147,32 @@ testsRouter.patch(
   }),
 );
 
+/**
+ * Deleting a test takes its results with it — the attempts, every answer, and
+ * with them the misses that fed each student's own list and the spacing
+ * suggestions. That is a decision rather than an accident, so a test anybody
+ * has sat is refused unless the request says, in as many words, that the
+ * results are meant to go too.
+ */
 testsRouter.delete(
   '/:id',
   route((req, res) => {
     const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
-    const attempts = req.db.get<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM attempts WHERE test_id = :t AND mode = 'graded'`,
-      { t: test.id },
-    );
-    if ((attempts?.n ?? 0) > 0) {
-      throw conflict('Students have taken this test — deleting it would delete their results.');
+    const sat =
+      req.db.get<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM attempts WHERE test_id = :t AND mode = 'graded'`,
+        { t: test.id },
+      )?.n ?? 0;
+
+    if (sat > 0 && req.query.withResults !== 'true') {
+      throw conflict(
+        `${sat} ${sat === 1 ? 'student has' : 'students have'} taken this test — deleting it deletes their results too.`,
+      );
     }
+    if (test.status === 'open') {
+      throw conflict('This test is open. Close it from the live board before deleting it.');
+    }
+
     req.db.run('DELETE FROM tests WHERE id = :id', { id: test.id });
     res.status(204).end();
   }),

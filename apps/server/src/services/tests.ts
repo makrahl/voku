@@ -18,7 +18,8 @@ import type { Db } from '../db/index.js';
 import { json } from '../db/index.js';
 import { conflict, notFound } from '../http.js';
 import { assignFormats, type AssignableWord } from './assign.js';
-import { buildOffline, type BuildableWord } from './build-questions.js';
+import { buildOffline, promptAndAnswers, type BuildableWord } from './build-questions.js';
+import { normalise } from './grading.js';
 import { makeRng, seedFrom } from './rng.js';
 
 export interface TestRow {
@@ -132,6 +133,7 @@ export function toTestView(db: Db, row: TestRow): TestView {
     targetCount: row.target_count,
     mix: mix.success ? mix.data : DEFAULT_MIX,
     mcqAnyWord: row.mcq_any_word === 1,
+    staleCount: staleQuestions(db, row.id).length,
     wordCount: counts.words,
     includedCount: counts.included,
     questionCount: counts.questions,
@@ -362,6 +364,40 @@ export function listQuestions(db: Db, testId: string): QuestionView[] {
       payload: QuestionPayloadSchema.parse(JSON.parse(row.payload_json)),
       orderIndex: row.order_index,
     }));
+}
+
+/**
+ * Questions whose wording no longer matches the word they came from.
+ *
+ * A question is built once and then stands on its own, so correcting a
+ * translation in the word list leaves the already-built question asking the
+ * old thing — and marking the old answer right. Only the two formats built
+ * from the pair itself can be checked: a definition or a gap sentence is
+ * prose, and prose cannot be compared to a word pair without guessing.
+ */
+export function staleQuestions(db: Db, testId: string): string[] {
+  const rows = db.all<QuestionRow & WordRow>(
+    `SELECT q.id AS question_id, q.payload_json, w.* FROM questions q
+       JOIN test_words w ON w.id = q.word_id
+      WHERE q.test_id = :t`,
+    { t: testId },
+  ) as Array<QuestionRow & WordRow & { question_id: string }>;
+
+  const stale: string[] = [];
+  for (const row of rows) {
+    const payload = QuestionPayloadSchema.parse(JSON.parse(row.payload_json));
+    if (payload.type !== 'translate_input' && payload.type !== 'mcq_translation') continue;
+
+    const { prompt, accepted } = promptAndAnswers(toBuildable(row), payload.direction);
+    const answer =
+      payload.type === 'translate_input' ? payload.accepted[0] : payload.options[payload.correctIndex];
+
+    const same =
+      normalise(payload.prompt) === normalise(prompt) &&
+      accepted.some((option) => normalise(option) === normalise(answer ?? ''));
+    if (!same) stale.push(row.question_id);
+  }
+  return stale;
 }
 
 export interface PersistableQuestion {
