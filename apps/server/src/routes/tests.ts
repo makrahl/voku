@@ -38,6 +38,7 @@ import {
   parseWordPaste,
   replaceQuestions,
   setStatus,
+  takenCount,
   toTestView,
   type TestRow,
   type WordRow,
@@ -63,6 +64,22 @@ testsRouter.use(requireTeacher);
 function assertEditable(test: TestRow): void {
   if (test.status === 'open') {
     throw conflict('Close the test before changing it — students are taking it right now.');
+  }
+}
+
+/**
+ * Once anybody has sat a test, its questions and word pairs stay as they were.
+ * Every answer is stored against the question it answered, so rebuilding,
+ * rewriting or dropping a question deletes the class's answers to it — the
+ * review, the regrade panel and each student's own list go with them, while
+ * the score stays behind with nothing under it. An answer the question should
+ * have taken is what the regrade panel is for.
+ */
+function assertNotTaken(db: Db, test: TestRow): void {
+  if (takenCount(db, test.id) > 0) {
+    throw conflict(
+      'The class has taken this test, so its questions stay as they are. To accept an answer, use “Answers you might have accepted” once the test is closed.',
+    );
   }
 }
 
@@ -147,17 +164,28 @@ testsRouter.patch(
   }),
 );
 
+/**
+ * Deleting a test takes its results with it — the attempts, every answer, and
+ * with them the misses that fed each student's own list and the spacing
+ * suggestions. That is a decision rather than an accident, so a test anybody
+ * has sat is refused unless the request says, in as many words, that the
+ * results are meant to go too.
+ */
 testsRouter.delete(
   '/:id',
   route((req, res) => {
     const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
-    const attempts = req.db.get<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM attempts WHERE test_id = :t AND mode = 'graded'`,
-      { t: test.id },
-    );
-    if ((attempts?.n ?? 0) > 0) {
-      throw conflict('Students have taken this test — deleting it would delete their results.');
+    const sat = takenCount(req.db, test.id);
+
+    if (sat > 0 && req.query.withResults !== 'true') {
+      throw conflict(
+        `${sat} ${sat === 1 ? 'student has' : 'students have'} taken this test — deleting it deletes their results too.`,
+      );
     }
+    if (test.status === 'open') {
+      throw conflict('This test is open. Close it from the live board before deleting it.');
+    }
+
     req.db.run('DELETE FROM tests WHERE id = :id', { id: test.id });
     res.status(204).end();
   }),
@@ -222,6 +250,11 @@ testsRouter.patch(
     assertEditable(test);
     const word = wordOf(req.db, test.id, param(req, 'wordId'));
     const body = parseBody(WordUpdateSchema, req.body);
+    // The definition and example only feed the study sheet, so they stay open;
+    // the pair is what the questions were built from.
+    if (body.headwordEn !== undefined || body.translationDe !== undefined) {
+      assertNotTaken(req.db, test);
+    }
 
     const sets: string[] = [];
     const params: Record<string, unknown> = { id: word.id };
@@ -251,6 +284,7 @@ testsRouter.delete(
   route((req, res) => {
     const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
     assertEditable(test);
+    assertNotTaken(req.db, test);
     const word = wordOf(req.db, test.id, param(req, 'wordId'));
     req.db.run('DELETE FROM test_words WHERE id = :id', { id: word.id });
     res.status(204).end();
@@ -277,6 +311,7 @@ testsRouter.post(
   route((req, res) => {
     const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
     assertEditable(test);
+    assertNotTaken(req.db, test);
     const report = generateOffline(req.db, test);
     res.json({ report, questions: listQuestions(req.db, test.id) });
   }),
@@ -298,6 +333,7 @@ testsRouter.patch(
   route((req, res) => {
     const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
     assertEditable(test);
+    assertNotTaken(req.db, test);
     const questionId = param(req, 'questionId');
     const existing = req.db.get<{ id: string }>(
       'SELECT id FROM questions WHERE id = :id AND test_id = :t',
@@ -320,6 +356,7 @@ testsRouter.delete(
   route((req, res) => {
     const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
     assertEditable(test);
+    assertNotTaken(req.db, test);
     const questionId = param(req, 'questionId');
     const row = req.db.get<{ word_id: string }>(
       'SELECT word_id FROM questions WHERE id = :id AND test_id = :t',
@@ -611,6 +648,7 @@ testsRouter.post(
   route((req, res) => {
     const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
     assertEditable(test);
+    assertNotTaken(req.db, test);
     requireLlm(req.db);
 
     const jobId = createJob(req.db, 'generate', test.id, 0);
@@ -625,6 +663,7 @@ testsRouter.post(
   route(async (req, res) => {
     const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
     assertEditable(test);
+    assertNotTaken(req.db, test);
     const questionId = param(req, 'questionId');
 
     const row = req.db.get<{ word_id: string; order_index: number; type: QuestionType }>(

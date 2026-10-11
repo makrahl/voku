@@ -220,6 +220,52 @@ describe('generating questions without a language model', () => {
   });
 });
 
+/**
+ * A question is built once and then stands on its own, so a word corrected
+ * afterwards leaves it asking the old thing — and marking the old answer right.
+ * The teacher is told rather than having it silently rebuilt, because
+ * rebuilding throws away anything they have edited by hand.
+ */
+describe('a word corrected after the questions were built', () => {
+  it('reports the questions that still ask the old wording', async () => {
+    const id = await withWords();
+    await server.patch(`/api/admin/tests/${id}`, {
+      mix: { translate_input: 100, mcq_translation: 0, mcq_definition: 0, fill_blank: 0 },
+    });
+    await server.post(`/api/admin/tests/${id}/generate`);
+    expect((await server.get(`/api/admin/tests/${id}`)).body.staleCount).toBe(0);
+
+    const words = (await server.get(`/api/admin/tests/${id}/words`)).body;
+    await server.patch(`/api/admin/tests/${id}/words/${words[0].id}`, {
+      translationDe: 'etwas ganz anderes',
+    });
+
+    expect((await server.get(`/api/admin/tests/${id}`)).body.staleCount).toBe(1);
+  });
+
+  it('is quiet again once they are rebuilt', async () => {
+    const id = await withWords();
+    await server.post(`/api/admin/tests/${id}/generate`);
+    const words = (await server.get(`/api/admin/tests/${id}/words`)).body;
+    await server.patch(`/api/admin/tests/${id}/words/${words[0].id}`, { headwordEn: 'painstaking' });
+
+    await server.post(`/api/admin/tests/${id}/generate`);
+    expect((await server.get(`/api/admin/tests/${id}`)).body.staleCount).toBe(0);
+  });
+
+  // Editing the sheet fields changes nothing a question asks.
+  it('says nothing when only the definition changed', async () => {
+    const id = await withWords();
+    await server.post(`/api/admin/tests/${id}/generate`);
+    const words = (await server.get(`/api/admin/tests/${id}/words`)).body;
+    await server.patch(`/api/admin/tests/${id}/words/${words[0].id}`, {
+      definitionEn: 'done carefully, leaving nothing out',
+    });
+
+    expect((await server.get(`/api/admin/tests/${id}`)).body.staleCount).toBe(0);
+  });
+});
+
 describe('reviewing questions', () => {
   it('accepts an edited payload and rejects an invalid one', async () => {
     const id = await withWords();
@@ -250,6 +296,134 @@ describe('reviewing questions', () => {
     const words = (await server.get(`/api/admin/tests/${id}/words`)).body;
     const dropped = words.find((w: { id: string }) => w.id === questions[3].wordId);
     expect(dropped.included).toBe(false);
+  });
+});
+
+/** A test one student has sat and handed in, then closed. */
+async function satByAStudent() {
+  const id = await withWords();
+  await server.post(`/api/admin/tests/${id}/generate`);
+  await server.patch(`/api/admin/tests/${id}`, { targetCount: 5 });
+  await server.post(`/api/admin/tests/${id}/publish`);
+  await server.post(`/api/admin/tests/${id}/open`);
+
+  const token = (await server.post(`/api/admin/classes/${classId}/students`, { names: 'Lena' }))
+    .body.added[0].token as string;
+
+  server.clearCookies();
+  await server.post('/api/s/session', { token });
+  const started = (await server.post(`/api/s/tests/${id}/start`)).body;
+  await server.post(`/api/s/attempts/${started.attempt.id}/answers`, {
+    questionId: started.question.id,
+    given: 'wrong',
+  });
+  await server.post(`/api/s/attempts/${started.attempt.id}/submit`);
+
+  server.clearCookies();
+  await server.post('/api/admin/auth/login', {
+    email: 'teacher@school.de',
+    password: 'hunter2hunter2',
+  });
+  await server.post(`/api/admin/tests/${id}/close`);
+  return id;
+}
+
+/**
+ * Deleting a test takes its results with it — the attempts, the answers, and
+ * the misses behind each student's own list. The teacher may do it; they may
+ * not do it by accident, so the request has to say that the results are meant
+ * to go too.
+ */
+describe('deleting a test', () => {
+  it('goes quietly when nobody has taken it', async () => {
+    const id = await withWords();
+    expect((await server.delete(`/api/admin/tests/${id}`)).status).toBe(204);
+    expect((await server.get(`/api/admin/tests/${id}`)).status).toBe(404);
+  });
+
+  it('refuses a test the class has sat, and says how many results it holds', async () => {
+    const id = await satByAStudent();
+    const res = await server.delete(`/api/admin/tests/${id}`);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('1 student has taken this test');
+    expect((await server.get(`/api/admin/tests/${id}`)).status).toBe(200);
+  });
+
+  it('deletes it, and the results with it, when asked in as many words', async () => {
+    const id = await satByAStudent();
+    expect((await server.delete(`/api/admin/tests/${id}?withResults=true`)).status).toBe(204);
+
+    expect((await server.get(`/api/admin/tests/${id}`)).status).toBe(404);
+    expect(
+      server.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM attempts WHERE test_id = :t', {
+        t: id,
+      })!.n,
+    ).toBe(0);
+  });
+
+  // Deleting a test out from under a room that is writing is never meant.
+  it('refuses while the test is open, results or no results', async () => {
+    const id = await withWords();
+    await server.post(`/api/admin/tests/${id}/generate`);
+    await server.patch(`/api/admin/tests/${id}`, { targetCount: 5 });
+    await server.post(`/api/admin/tests/${id}/open`);
+
+    const res = await server.delete(`/api/admin/tests/${id}?withResults=true`);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('Close it');
+  });
+});
+
+/**
+ * Every answer is stored against the question it answered, so rebuilding,
+ * rewriting or dropping a question once the class has sat the test would
+ * delete their answers and leave the scores with nothing under them. The
+ * regrade panel is how a wrong question is put right afterwards.
+ */
+describe('a test the class has sat', () => {
+  it('keeps its questions: no rebuild, rewrite, edit or drop', async () => {
+    const id = await satByAStudent();
+    const [question] = (await server.get(`/api/admin/tests/${id}/questions`)).body.questions;
+
+    for (const res of [
+      await server.post(`/api/admin/tests/${id}/generate`),
+      await server.post(`/api/admin/tests/${id}/questions/${question.id}/regenerate`, {}),
+      await server.patch(`/api/admin/tests/${id}/questions/${question.id}`, question.payload),
+      await server.delete(`/api/admin/tests/${id}/questions/${question.id}`),
+    ]) {
+      expect(res.status).toBe(409);
+      expect(res.body.error).toContain('Answers you might have accepted');
+    }
+    expect(
+      server.db.get<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM answers a JOIN attempts t ON t.id = a.attempt_id WHERE t.test_id = :t`,
+        { t: id },
+      )!.n,
+    ).toBe(1);
+  });
+
+  it('keeps its word pairs, but the study sheet can still be improved', async () => {
+    const id = await satByAStudent();
+    const [word] = (await server.get(`/api/admin/tests/${id}/words`)).body;
+
+    expect(
+      (await server.patch(`/api/admin/tests/${id}/words/${word.id}`, { translationDe: 'anders' })).status,
+    ).toBe(409);
+    expect(
+      (await server.patch(`/api/admin/tests/${id}/words/${word.id}`, { headwordEn: 'other' })).status,
+    ).toBe(409);
+    expect((await server.delete(`/api/admin/tests/${id}/words/${word.id}`)).status).toBe(409);
+
+    const sheet = await server.patch(`/api/admin/tests/${id}/words/${word.id}`, {
+      definitionEn: 'done carefully, leaving nothing out',
+    });
+    expect(sheet.status).toBe(200);
+  });
+
+  it('tells the composer how many have sat it', async () => {
+    const id = await satByAStudent();
+    expect((await server.get(`/api/admin/tests/${id}`)).body.takenCount).toBe(1);
   });
 });
 

@@ -187,6 +187,10 @@ export interface TestView {
   mix: z.infer<typeof MixWeightsSchema>;
   /** Multiple choice may go to any word, not only traps and the harder ones. */
   mcqAnyWord: boolean;
+  /** Questions still asking the old wording of a word that has been edited since. */
+  staleCount: number;
+  /** Students who have sat it. Once there are any, its questions and word pairs are fixed. */
+  takenCount: number;
   wordCount: number;
   includedCount: number;
   questionCount: number;

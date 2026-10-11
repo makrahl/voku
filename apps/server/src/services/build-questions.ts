@@ -44,7 +44,7 @@ export function resolveDirection(direction: TestDirection, index: number): Quest
 }
 
 /** What the student is shown, and what they have to produce. */
-function promptAndAnswers(
+export function promptAndAnswers(
   word: BuildableWord,
   direction: QuestionDirection,
 ): { prompt: string; accepted: string[] } {
