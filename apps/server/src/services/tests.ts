@@ -350,6 +350,7 @@ export function toBuildable(row: WordRow): BuildableWord {
     acceptedEn: json<string[]>(row.accepted_en_json, []),
     acceptedDe: json<string[]>(row.accepted_de_json, []),
     contextSentence: row.context_sentence,
+    definitionEn: row.definition_en,
     difficulty: row.difficulty,
   };
 }

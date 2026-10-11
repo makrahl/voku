@@ -73,6 +73,28 @@ export const WordPasteSchema = z.object({
   text: z.string().min(1),
 });
 
+/**
+ * A whole vocabulary list, as the teacher already has it: the pair plus the
+ * definition and the sentence it was met in.
+ *
+ * Those two are what the printed sheet and the gap-sentence questions need, so
+ * a list that carries them makes a complete test with no model involved at
+ * all. Sent as rows rather than as text because a definition contains commas,
+ * semicolons and dashes, and any separator would eventually be inside a
+ * sentence rather than between two of them.
+ */
+export const WordListEntrySchema = z.object({
+  headwordEn: z.string().trim().min(1).max(120),
+  translationDe: z.string().trim().min(1).max(200),
+  definitionEn: z.string().trim().max(400).optional(),
+  contextSentence: z.string().trim().max(400).optional(),
+});
+export type WordListEntry = z.infer<typeof WordListEntrySchema>;
+
+export const WordListImportSchema = z.object({
+  entries: z.array(WordListEntrySchema).min(1).max(300),
+});
+
 export const WordUpdateSchema = z.object({
   headwordEn: z.string().trim().min(1).optional(),
   translationDe: z.string().trim().min(1).optional(),

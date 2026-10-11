@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BLANK, QuestionPayloadSchema } from '@voku/shared';
 import {
+  asQuestionSentence,
   blankOut,
   buildOffline,
   resolveDirection,
@@ -218,6 +219,60 @@ describe('buildOffline', () => {
  * *ansprechen* or *thematisieren* depending on the sentence, and without the
  * sentence the student is guessing which one is wanted.
  */
+/**
+ * A word list writes a word the way a dictionary does and a sentence writes it
+ * the way people speak. Everything in between — the part of speech, the
+ * infinitive marker, the placeholder for an object — is furniture that has to
+ * come off before the word can be found in its own example.
+ */
+describe('finding a list word in a sentence', () => {
+  const gapped = (sentence: string, headword: string) => blankOut(sentence, headword)?.sentence;
+
+  it('ignores the part of speech noted after the word', () => {
+    expect(gapped('Delaney shifted his burden.', 'burden (n.)')).toBe(`Delaney shifted his ${BLANK}.`);
+  });
+
+  it('ignores the infinitive marker and the placeholder object', () => {
+    expect(gapped('How can you justify that?', 'to justify sth')).toBe(`How can you ${BLANK} that?`);
+  });
+
+  it('still catches the word when the sentence inflects it', () => {
+    expect(gapped('He justified the delay.', 'to justify sth')).toBe(`He ${BLANK} the delay.`);
+  });
+
+  // "to lock oneself away from sth" against "locking yourself away": the phrase
+  // will never match whole, and a gap on its verb is a fair question.
+  it('falls back to the longest word of a phrase', () => {
+    expect(gapped('Locking yourself away from the rest of society.', 'to lock oneself away from sth')).toBe(
+      `${BLANK} yourself away from the rest of society.`,
+    );
+  });
+
+  it('gives up rather than gapping a word that is not there', () => {
+    expect(blankOut('She checked it twice.', 'thorough (adj.)')).toBeNull();
+  });
+
+  // An accented letter is not a word boundary, whatever \b thinks.
+  it('gaps the whole word when it carries an accent', () => {
+    const gap = blankOut('Clichés. There is a point of saturation.', 'a cliché');
+    expect(gap?.surface).toBe('Clichés');
+    expect(gap?.sentence).toBe(`${BLANK}. There is a point of saturation.`);
+  });
+
+  /**
+   * The quotation marks and the line reference belong to the worksheet, where
+   * the class has the text in front of them. In a question the reference is a
+   * hint nobody meant to give.
+   */
+  it('leaves the quote marks and the line reference out of a question', () => {
+    expect(asQuestionSentence('“we all have a stake in things” l. 2')).toBe(
+      'we all have a stake in things',
+    );
+    expect(asQuestionSentence('“locking yourself away” ll. 2–3')).toBe('locking yourself away');
+    expect(asQuestionSentence('A plain sentence, as written.')).toBe('A plain sentence, as written.');
+  });
+});
+
 describe('the sentence under a typed question', () => {
   const ADDRESS = word('w9', 'address', 'thematisieren', {
     contextSentence: 'In his speech, the politician failed to address the core issues.',

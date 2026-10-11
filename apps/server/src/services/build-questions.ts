@@ -26,6 +26,8 @@ export interface BuildableWord {
   acceptedEn: string[];
   acceptedDe: string[];
   contextSentence: string | null;
+  /** Written by the teacher or a model; either way the definition MCQ can use it. */
+  definitionEn: string | null;
   difficulty: number;
 }
 
@@ -109,26 +111,90 @@ function pickDistractors(
 }
 
 /**
- * Turns the sentence the word appeared in into a gap. Tries the headword first,
- * then a few common inflections, because the text says "slammed" where the word
- * list says "slam". The surface form found is what the student has to type.
+ * The forms of a headword worth looking for in a sentence, longest first.
+ *
+ * A word list does not write words the way a sentence does. It says
+ * "burden (n.)", "to justify sth", "to lock oneself away from sth" — a lemma
+ * with a part of speech, an infinitive marker and a placeholder for whatever
+ * the object happens to be. The sentence has none of that furniture, so it is
+ * taken off a layer at a time, and the last resort is the longest real word in
+ * the entry: blanking "locking" out of a phrase is a fair gap, and no gap at
+ * all is not.
+ */
+export function headwordForms(headword: string): string[] {
+  const forms: string[] = [];
+  const add = (value: string) => {
+    const trimmed = value.trim().replace(/\s+/g, ' ');
+    if (trimmed.length >= 2 && !forms.includes(trimmed)) forms.push(trimmed);
+  };
+
+  add(headword);
+  // "burden (n.)", "freeway onramp (AE)" — the note is not part of the word.
+  const bare = headword.replace(/\([^)]*\)/g, ' ').trim();
+  add(bare);
+  // "to justify sth" — the placeholder stands for a word the sentence has its own.
+  const withoutPlaceholder = bare.replace(/\b(sth|sb|sth\/sb|sb\/sth|somebody|something)\b/gi, ' ');
+  add(withoutPlaceholder);
+  // "to grind sth out" is still "grind … out"; the infinitive marker is ours.
+  add(withoutPlaceholder.replace(/^(to|a|an|the)\s+/i, ''));
+
+  const longest = [...withoutPlaceholder.matchAll(/\p{L}+/gu)]
+    .map((match) => match[0])
+    .filter((word) => !/^(to|a|an|the|of|in|on|at|for|with|from|one|ones|oneself)$/i.test(word))
+    .sort((a, b) => b.length - a.length)[0];
+  if (longest) add(longest);
+
+  return forms;
+}
+
+/**
+ * Turns the sentence the word appeared in into a gap. Tries each form of the
+ * headword and a few common inflections, because the text says "slammed" where
+ * the word list says "slam". The surface form found is what the student types.
  */
 export function blankOut(sentence: string, headword: string): { sentence: string; surface: string } | null {
-  const escaped = headword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const patterns = [
-    new RegExp(`\\b${escaped}\\b`, 'i'),
-    new RegExp(`\\b${escaped}(s|es|ed|d|ing|ly|er|est)\\b`, 'i'),
-    // "slam" -> "slamming", "slammed": doubled final consonant.
-    new RegExp(`\\b${escaped}([bdfglmnprt])\\1?(ed|ing)\\b`, 'i'),
-  ];
+  // `\b` counts é as a boundary, which would gap "Cliché" and leave the "s" of
+  // "Clichés" sitting next to the blank. These say "no letter either side".
+  const before = '(?<![\\p{L}\\p{M}])';
+  const after = '(?![\\p{L}\\p{M}])';
 
-  for (const pattern of patterns) {
-    const match = pattern.exec(sentence);
-    if (!match) continue;
-    const surface = match[0];
-    return { sentence: sentence.replace(pattern, BLANK), surface };
+  for (const form of headwordForms(headword)) {
+    const escaped = form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const patterns = [
+      // Inflected forms first: the longest match is the honest one to blank.
+      new RegExp(`${before}${escaped}(s|es|ed|d|ing|ly|er|est)${after}`, 'iu'),
+      // "slam" -> "slamming", "slammed": doubled final consonant.
+      new RegExp(`${before}${escaped}([bdfglmnprt])\\1?(ed|ing)${after}`, 'iu'),
+      new RegExp(`${before}${escaped}${after}`, 'iu'),
+    ];
+    // "justify" -> "justified", "justifies": the y turns into an i.
+    if (/y$/i.test(form)) {
+      patterns.push(new RegExp(`${before}${escaped.slice(0, -1)}i(ed|es)${after}`, 'iu'));
+    }
+    for (const pattern of patterns) {
+      const match = pattern.exec(sentence);
+      if (!match) continue;
+      return { sentence: sentence.replace(pattern, BLANK), surface: match[0] };
+    }
   }
   return null;
+}
+
+/**
+ * An example sentence as a question should show it.
+ *
+ * A teacher's list quotes the text and says where it was: «“Clichés. There's a
+ * point of saturation.” l. 23». The quotation marks and the line reference are
+ * for the worksheet, where the class has the text in front of them; inside a
+ * question they are furniture, and the reference is a hint nobody intended.
+ * The stored sentence keeps them — this only changes what the question shows.
+ */
+export function asQuestionSentence(sentence: string): string {
+  return sentence
+    .trim()
+    .replace(/\s*\(?\bll?\.\s*\d+(\s*[–-]\s*\d+)?\)?\s*$/i, '')
+    .replace(/^[“”"«»']+|[“”"«»']+$/g, '')
+    .trim();
 }
 
 /**
@@ -142,7 +208,7 @@ export function blankOut(sentence: string, headword: string): { sentence: string
  * sentence with the answer sitting in it.
  */
 function typedContext(word: BuildableWord, direction: QuestionDirection): string | null {
-  const sentence = word.contextSentence?.trim();
+  const sentence = word.contextSentence ? asQuestionSentence(word.contextSentence) : '';
   if (!sentence) return null;
   if (direction === 'en_de') return sentence;
   return blankOut(sentence, word.headwordEn)?.sentence ?? null;
@@ -217,7 +283,8 @@ export function buildOffline(
       }
 
       case 'fill_blank': {
-        const blanked = word.contextSentence ? blankOut(word.contextSentence, word.headwordEn) : null;
+        const example = word.contextSentence ? asQuestionSentence(word.contextSentence) : '';
+        const blanked = example ? blankOut(example, word.headwordEn) : null;
         if (!blanked) {
           out.push(typed('fill_blank'));
           return;
@@ -235,10 +302,42 @@ export function buildOffline(
         return;
       }
 
-      case 'mcq_definition':
-        // An English definition has to be written; there is no local source for it.
-        out.push(typed('mcq_definition'));
+      case 'mcq_definition': {
+        // Written by a model, or — now that whole lists can be imported — by
+        // the teacher, in which case no model is needed for this format either.
+        const definition = word.definitionEn?.trim();
+        if (!definition) {
+          out.push(typed('mcq_definition'));
+          return;
+        }
+        // The words themselves are the options: which word does this describe?
+        const others = words
+          .filter((other) => other.id !== word.id)
+          .sort(
+            (a, b) =>
+              Math.abs(a.difficulty - word.difficulty) - Math.abs(b.difficulty - word.difficulty) ||
+              a.id.localeCompare(b.id),
+          )
+          .map((other) => other.headwordEn)
+          .filter((headword) => headword.toLowerCase() !== word.headwordEn.toLowerCase())
+          .slice(0, optionCount - 1);
+        if (others.length < 2) {
+          out.push(typed('mcq_definition'));
+          return;
+        }
+        const options = shuffle([word.headwordEn, ...others], rng);
+        out.push({
+          wordId: word.id,
+          type: 'mcq_definition',
+          payload: {
+            type: 'mcq_definition',
+            definition,
+            options,
+            correctIndex: options.indexOf(word.headwordEn),
+          },
+        });
         return;
+      }
     }
   });
 

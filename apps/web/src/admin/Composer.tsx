@@ -15,6 +15,7 @@ import {
   type WordView,
 } from '@voku/shared';
 import { ApiError, admin, api, waitForJob } from '../lib/api.ts';
+import type { VocabEntry } from '../lib/vocab-table.ts';
 // Types only: pdf.js itself is loaded when a PDF is picked, not with the app.
 import type { Pdf } from '../lib/pdf.ts';
 import {
@@ -711,6 +712,8 @@ function WordsStep({
         </div>
       </details>
 
+      <VocabListImport test={test} onImported={invalidate} />
+
       {list.length === 0 ? (
         <Empty title="No words yet">
           Find them in the text, or paste a list — whichever is quicker today.
@@ -807,6 +810,150 @@ function WordsStep({
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * A finished vocabulary list, taken as it stands.
+ *
+ * A teacher's list is a four-column table — word, German, definition, the
+ * sentence it was met in — and every one of those columns is something voku
+ * would otherwise ask a model to invent. So the table is read as a table, in
+ * the browser, and shown back before anything is added: a parse of someone
+ * else's document is a guess, and a guess belongs on screen rather than in the
+ * word list.
+ */
+function VocabListImport({ test, onImported }: { test: TestView; onImported: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [entries, setEntries] = useState<VocabEntry[] | null>(null);
+  const [skipped, setSkipped] = useState(0);
+
+  const read = async (file: File) => {
+    setError(null);
+    setEntries(null);
+    setStatus('Reading the list…');
+    try {
+      const [{ openPdf, readPageTable }, { rows, readList }] = await Promise.all([
+        import('../lib/pdf.ts'),
+        import('../lib/vocab-table.ts'),
+      ]);
+      const pdf = await openPdf(file);
+      try {
+        const table = [];
+        for (let page = 1; page <= pdf.pageCount; page++) {
+          setStatus(`Reading page ${page} of ${pdf.pageCount}…`);
+          table.push(...rows(await readPageTable(pdf, page)));
+        }
+        const found = readList(table);
+        if (found.entries.length === 0) {
+          setStatus(null);
+          setError(
+            'No vocabulary table found in that PDF. A table with a column of English words and one of German is what this looks for — a list written as plain text belongs in the box above.',
+          );
+          return;
+        }
+        setEntries(found.entries);
+        setSkipped(found.skipped);
+        setStatus(null);
+      } finally {
+        pdf.close();
+      }
+    } catch (err) {
+      setStatus(null);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const importList = useMutation({
+    mutationFn: () =>
+      api.post(admin(`/tests/${test.id}/words/import-list`), {
+        entries: (entries ?? []).map((entry) => ({
+          headwordEn: entry.english,
+          translationDe: entry.german,
+          definitionEn: entry.definition || undefined,
+          contextSentence: entry.example || undefined,
+        })),
+      }),
+    onSuccess: () => {
+      setEntries(null);
+      setStatus('Added. Check them over before going on.');
+      onImported();
+    },
+    onError: (e: ApiError) => setError(e.message),
+  });
+
+  const withSheet = (entries ?? []).filter((e) => e.definition && e.example).length;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.[0]) void read(e.target.files[0]);
+            e.target.value = '';
+          }}
+        />
+        <Button onClick={() => fileRef.current?.click()}>Upload a vocabulary list (PDF)</Button>
+        {status ? <span className="text-sm text-ink-60">{status}</span> : null}
+      </div>
+      <ErrorText>{error}</ErrorText>
+
+      {entries ? (
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-ink-60">
+            <strong className="text-ink">{entries.length} words</strong> read from that list,{' '}
+            {withSheet} of them with both a definition and an example — those are ready for the
+            worksheet and for gap sentences without any AI.
+            {skipped > 0
+              ? ` ${skipped} ${skipped === 1 ? 'row had' : 'rows had'} an English word but no German, so there was nothing to ask either way and ${skipped === 1 ? 'it was' : 'they were'} left out.`
+              : ''}{' '}
+            The order of the list is taken as easiest to hardest, which is the order the sprint
+            asks them in. Check a few lines before adding them; anything odd can be corrected
+            afterwards in the list below.
+          </p>
+          <div className="rule-t rule-b max-h-80 overflow-y-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 bg-paper">
+                <tr className="label">
+                  <th className="py-2 pr-3 font-semibold">English</th>
+                  <th className="py-2 pr-3 font-semibold">German</th>
+                  <th className="py-2 pr-3 font-semibold">Definition</th>
+                  <th className="py-2 font-semibold">Example</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry, index) => (
+                  <tr key={`${entry.english}-${index}`} className="rule-t align-top">
+                    <td className="py-2 pr-3">{entry.english}</td>
+                    <td className="py-2 pr-3 text-ink-60">{entry.german}</td>
+                    <td className="py-2 pr-3 text-ink-60">{entry.definition}</td>
+                    <td className="py-2 text-ink-40">{entry.example}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="primary"
+              onClick={() => importList.mutate()}
+              disabled={importList.isPending}
+            >
+              {`Add these ${entries.length} words`}
+            </Button>
+            <Button variant="quiet" onClick={() => setEntries(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
