@@ -11,6 +11,7 @@ import {
   TestInputSchema,
   TestUpdateSchema,
   WordCreateSchema,
+  WordListImportSchema,
   WordPasteSchema,
   WordUpdateSchema,
   WorksheetRequestSchema,
@@ -236,6 +237,39 @@ testsRouter.post(
         translationDe: pair.de,
         // Pasted order is taken as difficulty order.
         difficulty: difficultyForPosition(i, pairs.length),
+        origin: 'manual',
+      })),
+    );
+    res.status(201).json({ added: created });
+  }),
+);
+
+/**
+ * A whole list at once, definitions and example sentences included.
+ *
+ * The teacher's own lists already hold everything a worksheet and every
+ * question format needs, so taking them as they are — rather than as a pair
+ * and a lot of retyping — is what makes a complete test possible with no model
+ * configured at all.
+ */
+testsRouter.post(
+  '/:id/words/import-list',
+  route((req, res) => {
+    const test = getTestRow(req.db, req.teacher!.id, param(req, 'id'));
+    assertEditable(test);
+    assertNotTaken(req.db, test);
+    const { entries } = parseBody(WordListImportSchema, req.body);
+
+    const created = addWords(
+      req.db,
+      test.id,
+      entries.map((entry, index) => ({
+        headwordEn: entry.headwordEn,
+        translationDe: entry.translationDe,
+        definitionEn: entry.definitionEn || null,
+        contextSentence: entry.contextSentence || null,
+        // The order of the list is taken as difficulty order, as a paste is.
+        difficulty: difficultyForPosition(index, entries.length),
         origin: 'manual',
       })),
     );

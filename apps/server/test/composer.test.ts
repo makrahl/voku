@@ -221,6 +221,89 @@ describe('generating questions without a language model', () => {
 });
 
 /**
+ * A teacher's own list already holds the definition and the sentence the word
+ * was met in — the two things voku would otherwise ask a model to invent. Take
+ * the list as it stands and a complete test needs no model at all.
+ */
+describe('importing a finished vocabulary list', () => {
+  const LIST = [
+    {
+      headwordEn: 'burden',
+      translationDe: 'die Last',
+      definitionEn: 'a heavy load you are carrying',
+      contextSentence: 'Delaney shifted his burden from the right hand to the left.',
+    },
+    {
+      headwordEn: 'to justify sth',
+      translationDe: 'etwas rechtfertigen',
+      definitionEn: 'to give good reasons why something is right',
+      contextSentence: 'How can you justify that?',
+    },
+    {
+      headwordEn: 'rotten',
+      translationDe: 'verfault',
+      definitionEn: 'decayed, gone bad',
+      contextSentence: 'Mouths full of rotten teeth.',
+    },
+    {
+      headwordEn: 'a citizen',
+      translationDe: 'der Staatsbürger',
+      definitionEn: 'a person who legally belongs to a state',
+      contextSentence: 'Does that make me any less a citizen?',
+    },
+  ];
+
+  it('keeps the definition and the example that came with each word', async () => {
+    const id = await makeTest();
+    const res = await server.post(`/api/admin/tests/${id}/words/import-list`, { entries: LIST });
+
+    expect(res.status).toBe(201);
+    const words = (await server.get(`/api/admin/tests/${id}/words`)).body;
+    expect(words).toHaveLength(4);
+    const burden = words.find((w: { headwordEn: string }) => w.headwordEn === 'burden');
+    expect(burden.definitionEn).toBe('a heavy load you are carrying');
+    expect(burden.contextSentence).toContain('Delaney');
+    // The order of the list is taken as difficulty order, as a paste is.
+    expect(words[0].difficulty).toBeGreaterThan(words[3].difficulty);
+  });
+
+  // The point of the whole thing: no key, and still every format.
+  it('builds gap sentences and definition questions from it without a model', async () => {
+    const id = await makeTest();
+    await server.post(`/api/admin/tests/${id}/words/import-list`, { entries: LIST });
+    await server.patch(`/api/admin/tests/${id}`, {
+      mix: { translate_input: 0, mcq_translation: 0, mcq_definition: 50, fill_blank: 50 },
+      mcqAnyWord: true,
+    });
+
+    const report = (await server.post(`/api/admin/tests/${id}/generate`)).body.report;
+    expect(report.achieved.mcq_definition).toBeGreaterThan(0);
+    expect(report.achieved.fill_blank).toBeGreaterThan(0);
+
+    const questions = (await server.get(`/api/admin/tests/${id}/questions`)).body.questions;
+    const definition = questions.find((q: { type: string }) => q.type === 'mcq_definition');
+    expect(definition.payload.definition).toBeTruthy();
+    // The right answer is the word itself, among other words from the same list.
+    expect(definition.payload.options[definition.payload.correctIndex]).toBe(definition.headwordEn);
+  });
+
+  it('still asks for typing when the list brought no definitions', async () => {
+    const id = await makeTest();
+    await server.post(`/api/admin/tests/${id}/words/import-list`, {
+      entries: LIST.map(({ headwordEn, translationDe }) => ({ headwordEn, translationDe })),
+    });
+    await server.patch(`/api/admin/tests/${id}`, {
+      mix: { translate_input: 0, mcq_translation: 0, mcq_definition: 100, fill_blank: 0 },
+      mcqAnyWord: true,
+    });
+
+    const report = (await server.post(`/api/admin/tests/${id}/generate`)).body.report;
+    expect(report.achieved.mcq_definition).toBe(0);
+    expect(report.achieved.translate_input).toBe(4);
+  });
+});
+
+/**
  * A question is built once and then stands on its own, so a word corrected
  * afterwards leaves it asking the old thing — and marking the old answer right.
  * The teacher is told rather than having it silently rebuilt, because

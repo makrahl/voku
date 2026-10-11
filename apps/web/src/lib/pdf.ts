@@ -29,6 +29,7 @@ import {
   type CoverOps,
   type PageContent,
 } from './pdf-pages.ts';
+import type { Box, Page, Positioned } from './vocab-table.ts';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -76,6 +77,63 @@ export async function readPage(pdf: Pdf, pageNumber: number): Promise<PageConten
 
   page.cleanup();
   return { text, imageCover };
+}
+
+/**
+ * One page as a table: the rectangles drawn on it, and every word with its
+ * position.
+ *
+ * A word list exported from Word draws each cell as a rectangle, so the table
+ * is still a table in the file — which is worth far more than its text, where
+ * the columns have already been flattened into one stream. What the shapes
+ * mean is `vocab-table.ts`'s business; this only hands over what is on the page.
+ */
+export async function readPageTable(pdf: Pdf, pageNumber: number): Promise<Page> {
+  const page = await pdf.doc.getPage(pageNumber);
+  const [pageX0 = 0, pageY0 = 0, pageX1 = 0, pageY1 = 0] = page.view;
+  const { fnArray, argsArray } = await page.getOperatorList();
+
+  const boxes: Box[] = [];
+  fnArray.forEach((fn, index) => {
+    if (fn !== OPS.constructPath) return;
+    const raw = (argsArray[index] as unknown[])[1];
+    const points = Array.isArray(raw) ? raw[0] : raw;
+    const numbers = Object.values((points ?? {}) as Record<string, unknown>).map(Number);
+
+    // [op, x, y, op, x, y, …] — every third entry starts a point.
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (let i = 1; i + 1 < numbers.length; i += 3) {
+      const x = numbers[i]!;
+      const y = numbers[i + 1]!;
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        xs.push(x);
+        ys.push(y);
+      }
+    }
+    if (xs.length < 3) return;
+
+    const box = {
+      x0: Math.min(...xs),
+      x1: Math.max(...xs),
+      y0: Math.min(...ys),
+      y1: Math.max(...ys),
+    };
+    // The page's own background is not a cell.
+    const coversPage =
+      box.x1 - box.x0 > (pageX1 - pageX0) * 0.95 && box.y1 - box.y0 > (pageY1 - pageY0) * 0.95;
+    if (!coversPage) boxes.push(box);
+  });
+
+  const content = await page.getTextContent();
+  const texts: Positioned[] = content.items.flatMap((item) =>
+    'str' in item && item.str.trim()
+      ? [{ x: item.transform[4] as number, y: item.transform[5] as number, str: item.str }]
+      : [],
+  );
+
+  page.cleanup();
+  return { boxes, texts };
 }
 
 /**
