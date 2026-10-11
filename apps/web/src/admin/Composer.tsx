@@ -804,30 +804,40 @@ function WordSheetFields({
 
   return (
     <div className="flex flex-col gap-4 pl-10">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="The word" hint="As the class should write it.">
-          <Input
-            value={headword}
-            onChange={(e) => setHeadword(e.target.value)}
-            onBlur={() =>
-              headword.trim() &&
-              headword !== word.headwordEn &&
-              save.mutate({ headwordEn: headword.trim() })
-            }
-          />
-        </Field>
-        <Field label="German" hint="The translation marked correct.">
-          <Input
-            value={translation}
-            onChange={(e) => setTranslation(e.target.value)}
-            onBlur={() =>
-              translation.trim() &&
-              translation !== word.translationDe &&
-              save.mutate({ translationDe: translation.trim() })
-            }
-          />
-        </Field>
-      </div>
+      {/* Once the class has sat the test, the pair is what their answers were
+          marked against, so it stays — the server refuses it too. */}
+      {test.takenCount > 0 ? (
+        <Note>
+          The class has taken this test, so “{word.headwordEn}” and its German stay as they are. To
+          accept an answer they did not, use <b>Answers you might have accepted</b> once the test
+          is closed.
+        </Note>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="The word" hint="As the class should write it.">
+            <Input
+              value={headword}
+              onChange={(e) => setHeadword(e.target.value)}
+              onBlur={() =>
+                headword.trim() &&
+                headword !== word.headwordEn &&
+                save.mutate({ headwordEn: headword.trim() })
+              }
+            />
+          </Field>
+          <Field label="German" hint="The translation marked correct.">
+            <Input
+              value={translation}
+              onChange={(e) => setTranslation(e.target.value)}
+              onBlur={() =>
+                translation.trim() &&
+                translation !== word.translationDe &&
+                save.mutate({ translationDe: translation.trim() })
+              }
+            />
+          </Field>
+        </div>
+      )}
       <Field
         label="Definition, in English"
         hint="Plain English, and without using the word itself — otherwise the sheet gives the answer away."
@@ -852,33 +862,35 @@ function WordSheetFields({
         />
       </Field>
       <ErrorText>{error}</ErrorText>
-      <div className="flex items-center gap-4">
-        {confirming ? (
-          <>
-            <span className="text-sm text-ink">
-              Take “{word.headwordEn}” out of this test for good?
-            </span>
-            <Button size="sm" variant="primary" onClick={() => remove.mutate()} disabled={remove.isPending}>
-              Remove it
-            </Button>
-            <Button size="sm" variant="quiet" onClick={() => setConfirming(false)}>
-              Keep it
-            </Button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="label text-ink-40 transition-colors hover:text-ink"
-            onClick={() => setConfirming(true)}
-          >
-            Remove this word
-          </button>
-        )}
-        {/* Unticking is the gentler move, and most of the time the right one. */}
-        <span className="text-xs text-ink-40">
-          To leave it out of this test but keep it on the list, untick it instead.
-        </span>
-      </div>
+      {test.takenCount > 0 ? null : (
+        <div className="flex items-center gap-4">
+          {confirming ? (
+            <>
+              <span className="text-sm text-ink">
+                Take “{word.headwordEn}” out of this test for good?
+              </span>
+              <Button size="sm" variant="primary" onClick={() => remove.mutate()} disabled={remove.isPending}>
+                Remove it
+              </Button>
+              <Button size="sm" variant="quiet" onClick={() => setConfirming(false)}>
+                Keep it
+              </Button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="label text-ink-40 transition-colors hover:text-ink"
+              onClick={() => setConfirming(true)}
+            >
+              Remove this word
+            </button>
+          )}
+          {/* Unticking is the gentler move, and most of the time the right one. */}
+          <span className="text-xs text-ink-40">
+            To leave it out of this test but keep it on the list, untick it instead.
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -1231,31 +1243,45 @@ function QuestionsStep({
 
   const questions = data.data?.questions ?? [];
   const report = data.data?.report;
+  // Every answer is stored against its question, so once the class has sat
+  // the test nothing here may rebuild, rewrite or drop one.
+  const fixed = test.takenCount > 0;
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-3">
-        {aiReady ? (
-          <Button
-            variant="primary"
-            onClick={() => generate(true)}
-            disabled={Boolean(busy) || Boolean(job)}
-          >
-            Write the questions
+      {fixed ? (
+        <Note>
+          <b>
+            {test.takenCount} {test.takenCount === 1 ? 'student has' : 'students have'} taken this
+            test, so its questions stay as they are.
+          </b>{' '}
+          Their answers were marked against them. To accept an answer a question did not, use{' '}
+          <b>Answers you might have accepted</b> once the test is closed.
+        </Note>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          {aiReady ? (
+            <Button
+              variant="primary"
+              onClick={() => generate(true)}
+              disabled={Boolean(busy) || Boolean(job)}
+            >
+              Write the questions
+            </Button>
+          ) : null}
+          <Button onClick={() => generate(false)} disabled={Boolean(busy) || Boolean(job)}>
+            {aiReady ? 'Build without the AI' : 'Build the questions'}
           </Button>
-        ) : null}
-        <Button onClick={() => generate(false)} disabled={Boolean(busy) || Boolean(job)}>
-          {aiReady ? 'Build without the AI' : 'Build the questions'}
-        </Button>
-        {job ? <JobInline job={job} /> : busy ? <Spinner label={busy} /> : null}
-      </div>
+          {job ? <JobInline job={job} /> : busy ? <Spinner label={busy} /> : null}
+        </div>
+      )}
       <ErrorText>{error}</ErrorText>
 
       {/* A question is built once and then stands on its own, so a word
           corrected afterwards leaves it asking the old thing — and marking the
           old answer right. Said here rather than quietly fixed, because
           rebuilding throws away any question the teacher has edited by hand. */}
-      {test.staleCount > 0 ? (
+      {test.staleCount > 0 && !fixed ? (
         <Note>
           <b>
             {test.staleCount} {test.staleCount === 1 ? 'question still asks' : 'questions still ask'}{' '}
@@ -1288,43 +1314,45 @@ function QuestionsStep({
                       <span className="label">{TYPE_LABEL[question.type]}</span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1">
-                    <Select
-                      value={question.type}
-                      onChange={(e) =>
-                        regenerate.mutate({
-                          id: question.id,
-                          type: (e.target as HTMLSelectElement).value as QuestionType,
-                        })
-                      }
-                      className="min-h-9 w-52 text-sm"
-                    >
-                      {QUESTION_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {TYPE_LABEL[type]}
-                        </option>
-                      ))}
-                    </Select>
-                    {aiReady ? (
+                  {fixed ? null : (
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Select
+                        value={question.type}
+                        onChange={(e) =>
+                          regenerate.mutate({
+                            id: question.id,
+                            type: (e.target as HTMLSelectElement).value as QuestionType,
+                          })
+                        }
+                        className="min-h-9 w-52 text-sm"
+                      >
+                        {QUESTION_TYPES.map((type) => (
+                          <option key={type} value={type}>
+                            {TYPE_LABEL[type]}
+                          </option>
+                        ))}
+                      </Select>
+                      {aiReady ? (
+                        <Button
+                          size="sm"
+                          variant="quiet"
+                          onClick={() => regenerate.mutate({ id: question.id })}
+                        >
+                          Rewrite
+                        </Button>
+                      ) : null}
                       <Button
                         size="sm"
                         variant="quiet"
-                        onClick={() => regenerate.mutate({ id: question.id })}
+                        onClick={() => setEditing(editing === question.id ? null : question.id)}
                       >
-                        Rewrite
+                        {editing === question.id ? 'Close' : 'Edit'}
                       </Button>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      variant="quiet"
-                      onClick={() => setEditing(editing === question.id ? null : question.id)}
-                    >
-                      {editing === question.id ? 'Close' : 'Edit'}
-                    </Button>
-                    <Button size="sm" variant="quiet" onClick={() => remove.mutate(question.id)}>
-                      Drop
-                    </Button>
-                  </div>
+                      <Button size="sm" variant="quiet" onClick={() => remove.mutate(question.id)}>
+                        Drop
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {editing === question.id ? (

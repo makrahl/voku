@@ -109,6 +109,16 @@ const WORD_SELECT = `SELECT w.*, src.title AS repeated_from_title
      FROM test_words w
      LEFT JOIN tests src ON src.id = w.repeated_from`;
 
+/** How many students have sat the test, as opposed to practised it. */
+export function takenCount(db: Db, testId: string): number {
+  return (
+    db.get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM attempts WHERE test_id = :t AND mode = 'graded'`,
+      { t: testId },
+    )?.n ?? 0
+  );
+}
+
 export function toTestView(db: Db, row: TestRow): TestView {
   const counts = db.get<{ words: number; included: number; questions: number; class_name: string }>(
     `SELECT
@@ -134,6 +144,7 @@ export function toTestView(db: Db, row: TestRow): TestView {
     mix: mix.success ? mix.data : DEFAULT_MIX,
     mcqAnyWord: row.mcq_any_word === 1,
     staleCount: staleQuestions(db, row.id).length,
+    takenCount: takenCount(db, row.id),
     wordCount: counts.words,
     includedCount: counts.included,
     questionCount: counts.questions,

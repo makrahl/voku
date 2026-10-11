@@ -299,6 +299,35 @@ describe('reviewing questions', () => {
   });
 });
 
+/** A test one student has sat and handed in, then closed. */
+async function satByAStudent() {
+  const id = await withWords();
+  await server.post(`/api/admin/tests/${id}/generate`);
+  await server.patch(`/api/admin/tests/${id}`, { targetCount: 5 });
+  await server.post(`/api/admin/tests/${id}/publish`);
+  await server.post(`/api/admin/tests/${id}/open`);
+
+  const token = (await server.post(`/api/admin/classes/${classId}/students`, { names: 'Lena' }))
+    .body.added[0].token as string;
+
+  server.clearCookies();
+  await server.post('/api/s/session', { token });
+  const started = (await server.post(`/api/s/tests/${id}/start`)).body;
+  await server.post(`/api/s/attempts/${started.attempt.id}/answers`, {
+    questionId: started.question.id,
+    given: 'wrong',
+  });
+  await server.post(`/api/s/attempts/${started.attempt.id}/submit`);
+
+  server.clearCookies();
+  await server.post('/api/admin/auth/login', {
+    email: 'teacher@school.de',
+    password: 'hunter2hunter2',
+  });
+  await server.post(`/api/admin/tests/${id}/close`);
+  return id;
+}
+
 /**
  * Deleting a test takes its results with it — the attempts, the answers, and
  * the misses behind each student's own list. The teacher may do it; they may
@@ -306,34 +335,6 @@ describe('reviewing questions', () => {
  * to go too.
  */
 describe('deleting a test', () => {
-  async function satByAStudent() {
-    const id = await withWords();
-    await server.post(`/api/admin/tests/${id}/generate`);
-    await server.patch(`/api/admin/tests/${id}`, { targetCount: 5 });
-    await server.post(`/api/admin/tests/${id}/publish`);
-    await server.post(`/api/admin/tests/${id}/open`);
-
-    const token = (await server.post(`/api/admin/classes/${classId}/students`, { names: 'Lena' }))
-      .body.added[0].token as string;
-
-    server.clearCookies();
-    await server.post('/api/s/session', { token });
-    const started = (await server.post(`/api/s/tests/${id}/start`)).body;
-    await server.post(`/api/s/attempts/${started.attempt.id}/answers`, {
-      questionId: started.question.id,
-      given: 'wrong',
-    });
-    await server.post(`/api/s/attempts/${started.attempt.id}/submit`);
-
-    server.clearCookies();
-    await server.post('/api/admin/auth/login', {
-      email: 'teacher@school.de',
-      password: 'hunter2hunter2',
-    });
-    await server.post(`/api/admin/tests/${id}/close`);
-    return id;
-  }
-
   it('goes quietly when nobody has taken it', async () => {
     const id = await withWords();
     expect((await server.delete(`/api/admin/tests/${id}`)).status).toBe(204);
@@ -371,6 +372,58 @@ describe('deleting a test', () => {
     const res = await server.delete(`/api/admin/tests/${id}?withResults=true`);
     expect(res.status).toBe(409);
     expect(res.body.error).toContain('Close it');
+  });
+});
+
+/**
+ * Every answer is stored against the question it answered, so rebuilding,
+ * rewriting or dropping a question once the class has sat the test would
+ * delete their answers and leave the scores with nothing under them. The
+ * regrade panel is how a wrong question is put right afterwards.
+ */
+describe('a test the class has sat', () => {
+  it('keeps its questions: no rebuild, rewrite, edit or drop', async () => {
+    const id = await satByAStudent();
+    const [question] = (await server.get(`/api/admin/tests/${id}/questions`)).body.questions;
+
+    for (const res of [
+      await server.post(`/api/admin/tests/${id}/generate`),
+      await server.post(`/api/admin/tests/${id}/questions/${question.id}/regenerate`, {}),
+      await server.patch(`/api/admin/tests/${id}/questions/${question.id}`, question.payload),
+      await server.delete(`/api/admin/tests/${id}/questions/${question.id}`),
+    ]) {
+      expect(res.status).toBe(409);
+      expect(res.body.error).toContain('Answers you might have accepted');
+    }
+    expect(
+      server.db.get<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM answers a JOIN attempts t ON t.id = a.attempt_id WHERE t.test_id = :t`,
+        { t: id },
+      )!.n,
+    ).toBe(1);
+  });
+
+  it('keeps its word pairs, but the study sheet can still be improved', async () => {
+    const id = await satByAStudent();
+    const [word] = (await server.get(`/api/admin/tests/${id}/words`)).body;
+
+    expect(
+      (await server.patch(`/api/admin/tests/${id}/words/${word.id}`, { translationDe: 'anders' })).status,
+    ).toBe(409);
+    expect(
+      (await server.patch(`/api/admin/tests/${id}/words/${word.id}`, { headwordEn: 'other' })).status,
+    ).toBe(409);
+    expect((await server.delete(`/api/admin/tests/${id}/words/${word.id}`)).status).toBe(409);
+
+    const sheet = await server.patch(`/api/admin/tests/${id}/words/${word.id}`, {
+      definitionEn: 'done carefully, leaving nothing out',
+    });
+    expect(sheet.status).toBe(200);
+  });
+
+  it('tells the composer how many have sat it', async () => {
+    const id = await satByAStudent();
+    expect((await server.get(`/api/admin/tests/${id}`)).body.takenCount).toBe(1);
   });
 });
 
