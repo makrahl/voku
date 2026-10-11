@@ -15,7 +15,8 @@ import {
   type WordView,
 } from '@voku/shared';
 import { ApiError, admin, api, waitForJob } from '../lib/api.ts';
-import type { VocabEntry } from '../lib/vocab-table.ts';
+import { readPastedList } from '../lib/paste-table.ts';
+import type { ListReading } from '../lib/vocab-table.ts';
 // Types only: pdf.js itself is loaded when a PDF is picked, not with the app.
 import type { Pdf } from '../lib/pdf.ts';
 import {
@@ -606,6 +607,7 @@ function WordsStep({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [paste, setPaste] = useState('');
+  const [pastedList, setPastedList] = useState<ListReading | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRepeats, setShowRepeats] = useState(false);
@@ -629,6 +631,25 @@ function WordsStep({
     },
     onError: (e: ApiError) => setError(e.message),
   });
+
+  // A whole table copied out of a spreadsheet goes through the same preview as
+  // a PDF list. Sent as pairs it used to land with the definition and the
+  // example glued onto the German, which no student could ever type.
+  const addPasted = () => {
+    setError(null);
+    const reading = readPastedList(paste);
+    if (!reading) {
+      pasteWords.mutate();
+      return;
+    }
+    if (reading.entries.length === 0) {
+      setError(
+        'No word pairs in that table. Copy the columns with the English word and the German in them, side by side.',
+      );
+      return;
+    }
+    setPastedList(reading);
+  };
 
   const toggle = useMutation({
     mutationFn: ({ id, included }: { id: string; included: boolean }) =>
@@ -694,21 +715,37 @@ function WordsStep({
         <div className="mt-4 flex flex-col gap-3">
           <Field
             label="One pair per line"
-            hint="English first, then German — separated by a semicolon, a tab, or a spaced hyphen. The order you paste is taken as easiest-to-hardest."
+            hint="English first, then German — separated by a semicolon, a tab, or a spaced hyphen. Or copy a whole table from Excel, Google Sheets or Word — English, German, definition, example sentence — and paste it as it is. The order you paste is taken as easiest-to-hardest."
           >
             <Textarea
               value={paste}
-              onChange={(e) => setPaste(e.target.value)}
+              onChange={(e) => {
+                setPaste(e.target.value);
+                setPastedList(null);
+              }}
               placeholder={'receive;bekommen\nthorough;gründlich\nnevertheless;dennoch'}
             />
           </Field>
-          <Button
-            variant="primary"
-            disabled={!paste.trim() || pasteWords.isPending}
-            onClick={() => pasteWords.mutate()}
-          >
-            Add these words
-          </Button>
+          {pastedList ? (
+            <VocabPreview
+              test={test}
+              reading={pastedList}
+              onImported={() => {
+                setPaste('');
+                setPastedList(null);
+                invalidate();
+              }}
+              onCancel={() => setPastedList(null)}
+            />
+          ) : (
+            <Button
+              variant="primary"
+              disabled={!paste.trim() || pasteWords.isPending}
+              onClick={addPasted}
+            >
+              Add these words
+            </Button>
+          )}
         </div>
       </details>
 
@@ -828,12 +865,11 @@ function VocabListImport({ test, onImported }: { test: TestView; onImported: () 
   const fileRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [entries, setEntries] = useState<VocabEntry[] | null>(null);
-  const [skipped, setSkipped] = useState(0);
+  const [reading, setReading] = useState<ListReading | null>(null);
 
   const read = async (file: File) => {
     setError(null);
-    setEntries(null);
+    setReading(null);
     setStatus('Reading the list…');
     try {
       const [{ openPdf, readPageTable }, { rows, readList }] = await Promise.all([
@@ -855,8 +891,7 @@ function VocabListImport({ test, onImported }: { test: TestView; onImported: () 
           );
           return;
         }
-        setEntries(found.entries);
-        setSkipped(found.skipped);
+        setReading(found);
         setStatus(null);
       } finally {
         pdf.close();
@@ -866,26 +901,6 @@ function VocabListImport({ test, onImported }: { test: TestView; onImported: () 
       setError(err instanceof Error ? err.message : String(err));
     }
   };
-
-  const importList = useMutation({
-    mutationFn: () =>
-      api.post(admin(`/tests/${test.id}/words/import-list`), {
-        entries: (entries ?? []).map((entry) => ({
-          headwordEn: entry.english,
-          translationDe: entry.german,
-          definitionEn: entry.definition || undefined,
-          contextSentence: entry.example || undefined,
-        })),
-      }),
-    onSuccess: () => {
-      setEntries(null);
-      setStatus('Added. Check them over before going on.');
-      onImported();
-    },
-    onError: (e: ApiError) => setError(e.message),
-  });
-
-  const withSheet = (entries ?? []).filter((e) => e.definition && e.example).length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -905,55 +920,107 @@ function VocabListImport({ test, onImported }: { test: TestView; onImported: () 
       </div>
       <ErrorText>{error}</ErrorText>
 
-      {entries ? (
-        <div className="flex flex-col gap-4">
-          <p className="text-sm text-ink-60">
-            <strong className="text-ink">{entries.length} words</strong> read from that list,{' '}
-            {withSheet} of them with both a definition and an example — those are ready for the
-            worksheet and for gap sentences without any AI.
-            {skipped > 0
-              ? ` ${skipped} ${skipped === 1 ? 'row had' : 'rows had'} an English word but no German, so there was nothing to ask either way and ${skipped === 1 ? 'it was' : 'they were'} left out.`
-              : ''}{' '}
-            The order of the list is taken as easiest to hardest, which is the order the sprint
-            asks them in. Check a few lines before adding them; anything odd can be corrected
-            afterwards in the list below.
-          </p>
-          <div className="rule-t rule-b max-h-80 overflow-y-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-paper">
-                <tr className="label">
-                  <th className="py-2 pr-3 font-semibold">English</th>
-                  <th className="py-2 pr-3 font-semibold">German</th>
-                  <th className="py-2 pr-3 font-semibold">Definition</th>
-                  <th className="py-2 font-semibold">Example</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry, index) => (
-                  <tr key={`${entry.english}-${index}`} className="rule-t align-top">
-                    <td className="py-2 pr-3">{entry.english}</td>
-                    <td className="py-2 pr-3 text-ink-60">{entry.german}</td>
-                    <td className="py-2 pr-3 text-ink-60">{entry.definition}</td>
-                    <td className="py-2 text-ink-40">{entry.example}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="primary"
-              onClick={() => importList.mutate()}
-              disabled={importList.isPending}
-            >
-              {`Add these ${entries.length} words`}
-            </Button>
-            <Button variant="quiet" onClick={() => setEntries(null)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
+      {reading ? (
+        <VocabPreview
+          test={test}
+          reading={reading}
+          onImported={() => {
+            setReading(null);
+            setStatus('Added. Check them over before going on.');
+            onImported();
+          }}
+          onCancel={() => setReading(null)}
+        />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * What was read from a list, shown before any of it is added.
+ *
+ * A PDF and a table pasted from a spreadsheet arrive here alike: either way it
+ * is a reading of somebody else's document, and a guess belongs on screen
+ * rather than in the word list.
+ */
+function VocabPreview({
+  test,
+  reading,
+  onImported,
+  onCancel,
+}: {
+  test: TestView;
+  reading: ListReading;
+  onImported: () => void;
+  onCancel: () => void;
+}) {
+  const { entries, skipped } = reading;
+  const [error, setError] = useState<string | null>(null);
+
+  const importList = useMutation({
+    mutationFn: () =>
+      api.post(admin(`/tests/${test.id}/words/import-list`), {
+        entries: entries.map((entry) => ({
+          headwordEn: entry.english,
+          translationDe: entry.german,
+          definitionEn: entry.definition || undefined,
+          contextSentence: entry.example || undefined,
+        })),
+      }),
+    onSuccess: onImported,
+    onError: (e: ApiError) => setError(e.message),
+  });
+
+  const withSheet = entries.filter((e) => e.definition && e.example).length;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-ink-60">
+        <strong className="text-ink">{entries.length} words</strong> read from that list,{' '}
+        {withSheet} of them with both a definition and an example — those are ready for the
+        worksheet and for gap sentences without any AI.
+        {skipped > 0
+          ? ` ${skipped} ${skipped === 1 ? 'row had' : 'rows had'} an English word but no German, so there was nothing to ask either way and ${skipped === 1 ? 'it was' : 'they were'} left out.`
+          : ''}{' '}
+        The order of the list is taken as easiest to hardest, which is the order the sprint
+        asks them in. Check a few lines before adding them; anything odd can be corrected
+        afterwards in the list below.
+      </p>
+      <div className="rule-t rule-b max-h-80 overflow-y-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="sticky top-0 bg-paper">
+            <tr className="label">
+              <th className="py-2 pr-3 font-semibold">English</th>
+              <th className="py-2 pr-3 font-semibold">German</th>
+              <th className="py-2 pr-3 font-semibold">Definition</th>
+              <th className="py-2 font-semibold">Example</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry, index) => (
+              <tr key={`${entry.english}-${index}`} className="rule-t align-top">
+                <td className="py-2 pr-3">{entry.english}</td>
+                <td className="py-2 pr-3 text-ink-60">{entry.german}</td>
+                <td className="py-2 pr-3 text-ink-60">{entry.definition}</td>
+                <td className="py-2 text-ink-40">{entry.example}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="primary"
+          onClick={() => importList.mutate()}
+          disabled={importList.isPending}
+        >
+          {`Add these ${entries.length} words`}
+        </Button>
+        <Button variant="quiet" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      <ErrorText>{error}</ErrorText>
     </div>
   );
 }
